@@ -114,7 +114,7 @@ if sv.page == "survey":
 
     # 1 - هەست
     st.markdown("### ١. هەستت لەگەڵ هەوای ئێستا چۆنە؟")
-    feelings = ["😃 باشم", "😐 ئاسایی", "☹️ خۆشم نیە", "😫 زۆر باشم"]
+    feelings = ["😃 باش", "😐 ئاسایی", "☹️ خۆش نیە", "😫 زۆر باشم"]
     fcols = st.columns(len(feelings))
     for i, lab in enumerate(feelings):
         if fcols[i].button(lab, key=f"feel_{i}", type="primary" if sv.feeling == lab else "secondary"):
@@ -127,7 +127,7 @@ if sv.page == "survey":
     issues_all = [
         "🔥 گەرمای زۆر", "🌪️ خۆڵبارین", "💨 با", "🏭 پیسبوونی هەوا",
         "💧 شێداری", "☀️ تیشکی خوَر", "⚡  بروسك ",
-        "🌧️ باران", "❄️ ساردی", "🌫️ تەمە"
+        "🌧️باران", "❄️ ساردی", "🌫️ تەم"
     ]
     icol = st.columns(2)
     for i, iss in enumerate(issues_all):
@@ -167,7 +167,7 @@ if sv.page == "survey":
             "issues": ", ".join(sorted(sv.issues)),
         }
         save_row(row)
-        st.success("سپاس! وەڵامت تۆمار کرا.")
+        st.success("سپاس! وەڵامەکەت تۆمار کرا.")
         sv.feeling, sv.issues, sv.latlon, sv.loc_name = None, set(), None, ""
 
     st.markdown("---")
@@ -181,7 +181,7 @@ elif sv.page == "map":
 
     data = fetch_rows()
     if not data:
-        st.info("هێشتا وەڵام نییە؛ تکایە لە بابەتی ڕاپرسی وەڵام بدە.")
+        st.info("هێشتا وەڵام نییە؛ تکایە لە بابەتی ڕاپرسی وەڵام بدەرەوە.")
     else:
         colrs = {"😃 باشم": "green", "😐 ئاسایی": "blue",
                  "☹️ خۆشم نیە": "orange", "😫 زۆر کێشم": "red"}
