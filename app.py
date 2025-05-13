@@ -10,8 +10,8 @@ from streamlit_folium import st_folium
 from auth import handle_authentication
 
 # ───────── LOCATION & CONFIG ─────────
-LATITUDE  = 36.1912   #  ← 36° 11′ N  (Erbil, correct lat)
-LONGITUDE = 44.0094   #  ← 44° 00′ E  (Erbil, correct lon)
+LATITUDE  = 36.1912
+LONGITUDE = 44.0094
 TIMEZONE  = "auto"
 HOURS_TO_SHOW = 24
 
@@ -28,10 +28,9 @@ with st.sidebar:
 # ───────── HEADER ─────────
 st.title("🏠 Cool Assistant")
 st.caption(
-    "24-hour **heat** & multi-pollutant air-quality outlook for the Kurdistan Region "
-    "(data via Open-Meteo)."
+    "Real-time **European AQI** and 24-hour heat/dust outlook for the Kurdistan Region "
+    "(data from Open-Meteo)."
 )
-
 st.subheader("💡 Daily Tip")
 st.write(
     random.choice(
@@ -44,34 +43,42 @@ st.write(
 )
 
 # ───────── Folium helper ─────────
-def build_map(lat: float, lon: float) -> folium.Map:
+def build_map(lat, lon):
     m = folium.Map(location=[lat, lon], zoom_start=6)
     folium.Marker([lat, lon], tooltip="Kurdistan Region").add_to(m)
     return m
 
 # ───────── Data fetchers ─────────
-@st.cache_data(ttl=900)
-def get_air_quality(lat: float, lon: float) -> dict:
+@st.cache_data(ttl=300)
+def get_air_quality(lat, lon):
     url = (
         "https://air-quality-api.open-meteo.com/v1/air-quality"
         f"?latitude={lat}&longitude={lon}"
-        "&hourly=pm10,pm2_5,nitrogen_dioxide,sulphur_dioxide"
-        ",aerosol_optical_depth,dust,ammonia,methane"
+        "&hourly=pm10,pm2_5,nitrogen_dioxide,sulphur_dioxide,"
+        "aerosol_optical_depth,dust,ammonia,methane"
+        "&current=aerosol_optical_depth,dust,european_aqi,pm10,pm2_5,nitrogen_dioxide"
         "&past_days=5"
         f"&timezone={TIMEZONE}"
     )
     j = requests.get(url, timeout=10).json()
+
+    # current
+    cur = {k: j["current"][k][0] for k in j["current"] if k != "time"}
+    cur["time"] = dt.datetime.fromisoformat(j["current"]["time"][0])
+
+    # hourly
     t = [dt.datetime.fromisoformat(x) for x in j["hourly"]["time"]]
-    return {
+    hourly = {
         "time": t,
         "pm10": j["hourly"]["pm10"],
         "pm2_5": j["hourly"]["pm2_5"],
         "no2": j["hourly"]["nitrogen_dioxide"],
         "so2": j["hourly"]["sulphur_dioxide"],
     }
+    return cur, hourly
 
 @st.cache_data(ttl=600)
-def get_hourly_temps(lat: float, lon: float) -> dict:
+def get_hourly_temps(lat, lon):
     url = (
         "https://api.open-meteo.com/v1/forecast"
         f"?latitude={lat}&longitude={lon}"
@@ -82,30 +89,37 @@ def get_hourly_temps(lat: float, lon: float) -> dict:
     times = [dt.datetime.fromisoformat(t) for t in j["hourly"]["time"]]
     return {"time": times, "temp": j["hourly"]["temperature_2m"]}
 
-# ───────── EU-AQI bucket rules ─────────
+# ───────── Classification tables ─────────
+EU_AQI_RULES = [
+    (0, 25,   "Good",      "green"),
+    (25, 50,  "Fair",      "limegreen"),
+    (50, 75,  "Moderate",  "yellow"),
+    (75, 100, "Poor",      "orange"),
+    (100, 1e9,"Very poor", "red"),
+]
 PM25_RULES = [
-    (0, 10,    "Good",            "green"),
-    (10, 20,   "Fair",            "limegreen"),
-    (20, 25,   "Moderate",        "yellow"),
-    (25, 50,   "Poor",            "orange"),
-    (50, 75,   "Very poor",       "red"),
-    (75, 800,  "Extremely poor",  "darkred"),
+    (0, 10,   "Good",            "green"),
+    (10, 20,  "Fair",            "limegreen"),
+    (20, 25,  "Moderate",        "yellow"),
+    (25, 50,  "Poor",            "orange"),
+    (50, 75,  "Very poor",       "red"),
+    (75, 800, "Extremely poor",  "darkred"),
 ]
 PM10_RULES = [
-    (0, 20,    "Good",            "green"),
-    (20, 40,   "Fair",            "limegreen"),
-    (40, 50,   "Moderate",        "yellow"),
-    (50, 100,  "Poor",            "orange"),
-    (100, 150, "Very poor",       "red"),
-    (150, 1200,"Extremely poor",  "darkred"),
+    (0, 20,   "Good",            "green"),
+    (20, 40,  "Fair",            "limegreen"),
+    (40, 50,  "Moderate",        "yellow"),
+    (50, 100, "Poor",            "orange"),
+    (100, 150,"Very poor",       "red"),
+    (150, 1200,"Extremely poor", "darkred"),
 ]
 NO2_RULES = [
-    (0, 40,    "Good",            "green"),
-    (40, 90,   "Fair",            "limegreen"),
-    (90, 120,  "Moderate",        "yellow"),
-    (120, 230, "Poor",            "orange"),
-    (230, 340, "Very poor",       "red"),
-    (340, 1000,"Extremely poor",  "darkred"),
+    (0, 40,   "Good",            "green"),
+    (40, 90,  "Fair",            "limegreen"),
+    (90, 120, "Moderate",        "yellow"),
+    (120, 230,"Poor",            "orange"),
+    (230, 340,"Very poor",       "red"),
+    (340, 1000,"Extremely poor", "darkred"),
 ]
 SO2_RULES = [
     (0, 100,   "Good",            "green"),
@@ -116,15 +130,15 @@ SO2_RULES = [
     (750, 1250,"Extremely poor",  "darkred"),
 ]
 
-def classify(v: float, table):
-    for lo, hi, label, colour in table:
+def classify(v, rules):
+    for lo, hi, lab, col in rules:
         if lo <= v < hi:
-            return label, colour
+            return lab, col
     return "?", "grey"
 
-def chart(df: pd.DataFrame, title: str, vmax: int, table):
+def chart(df, title, vmax, rules):
     df = df.copy()
-    df["bucket"], df["colour"] = zip(*df["value"].map(lambda v: classify(v, table)))
+    df["bucket"], df["colour"] = zip(*df["value"].map(lambda v: classify(v, rules)))
     return (
         alt.Chart(df)
         .mark_bar(height=22)
@@ -138,37 +152,59 @@ def chart(df: pd.DataFrame, title: str, vmax: int, table):
     )
 
 # ───────── Tabs ─────────
-dust_tab, heat_tab = st.tabs(["🌪️ Air-Quality", "🌞 Temperature"])
+aq_tab, heat_tab = st.tabs(["🌪️ Air-Quality", "🌞 Temperature"])
 
 # ─────── AIR-QUALITY TAB ───────
-with dust_tab:
-    st.header("🌪️ Multi-Pollutant Air Quality – next 4 days")
-    st_folium(build_map(LATITUDE, LONGITUDE), use_container_width=True, height=420, key="dust_map")
+with aq_tab:
+    st.header("🌪️ European AQI & Pollutants")
+    st_folium(build_map(LATITUDE, LONGITUDE), use_container_width=True, height=420, key="aq_map")
 
-    aq = get_air_quality(LATITUDE, LONGITUDE)
+    current, hr = get_air_quality(LATITUDE, LONGITUDE)
 
-    # Daily maxima / peaks
-    aggs = {p: {} for p in ["pm10", "pm2_5", "no2", "so2"]}
-    for t, v10, v25, n, s in zip(
-        aq["time"], aq["pm10"], aq["pm2_5"], aq["no2"], aq["so2"]
+    # ----- Current conditions panel -----
+    st.subheader(f"Current conditions – {current['time'].strftime('%H:%M')}")
+    aqi_val = current["european_aqi"]
+    aqi_label, aqi_color = classify(aqi_val, EU_AQI_RULES)
+    st.metric("European AQI", f"{aqi_val:.0f}", aqi_label, delta_color="off")
+    st.write(f"<div style='height:10px;background:{aqi_color}'></div>", unsafe_allow_html=True)
+
+    cols = st.columns(3)
+    for c, (lbl, key, rules) in zip(
+        cols,
+        [
+            ("PM2.5 µg/m³", "pm2_5", PM25_RULES),
+            ("PM10 µg/m³",  "pm10",  PM10_RULES),
+            ("NO₂ µg/m³",   "nitrogen_dioxide", NO2_RULES),
+        ],
     ):
+        val = current[key]
+        label, color = classify(val, rules)
+        with c:
+            st.metric(lbl, f"{val:.0f}", label, delta_color="off")
+            st.write(f"<div style='height:6px;background:{color}'></div>", unsafe_allow_html=True)
+
+    st.divider()
+
+    # ----- 4-day bar-charts -----
+    aggs = {p: {} for p in ["pm10", "pm2_5", "no2", "so2"]}
+    for t, v10, v25, n, s in zip(hr["time"], hr["pm10"], hr["pm2_5"], hr["no2"], hr["so2"]):
         d = t.date()
         aggs["pm10"][d] = max(v10, aggs["pm10"].get(d, -1))
         aggs["pm2_5"][d] = max(v25, aggs["pm2_5"].get(d, -1))
-        aggs["no2"][d] = max(n, aggs["no2"].get(d, -1))
-        aggs["so2"][d] = max(s, aggs["so2"].get(d, -1))
+        aggs["no2"][d]  = max(n, aggs["no2"].get(d, -1))
+        aggs["so2"][d]  = max(s, aggs["so2"].get(d, -1))
 
     def make_df(series):
         return pd.DataFrame(
-            {"day": [d.strftime("%a %d %b") for d in list(series)[:4]],
+            {"day": [d.strftime("%a %d") for d in list(series)[:4]],
              "value": list(series.values())[:4]}
         )
 
     charts = [
-        ("PM2.5 (µg/m³)", make_df(aggs["pm2_5"]), 800,  PM25_RULES),
-        ("PM10 (µg/m³)",  make_df(aggs["pm10"]),  1200, PM10_RULES),
-        ("NO₂ (µg/m³)",   make_df(aggs["no2"]),   1000, NO2_RULES),
-        ("SO₂ (µg/m³)",   make_df(aggs["so2"]),   1250, SO2_RULES),
+        ("PM2.5 (24-h max)", make_df(aggs["pm2_5"]), 800,  PM25_RULES),
+        ("PM10  (24-h max)", make_df(aggs["pm10"]),  1200, PM10_RULES),
+        ("NO₂   (1-h max)",  make_df(aggs["no2"]),   1000, NO2_RULES),
+        ("SO₂   (1-h max)",  make_df(aggs["so2"]),   1250, SO2_RULES),
     ]
     for title, df, vmax, table in charts:
         st.subheader(title)
