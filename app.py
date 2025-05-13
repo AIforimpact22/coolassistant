@@ -28,7 +28,7 @@ with st.sidebar:
 st.title("🏠 Cool Assistant")
 st.caption(
     "Real-time **European AQI** and 24-h heat/dust outlook for the Kurdistan Region "
-    "— data from Open-Meteo’s free API."
+    "— data via Open-Meteo."
 )
 st.subheader("💡 Daily Tip")
 st.write(
@@ -48,6 +48,10 @@ def build_map(lat, lon):
     return m
 
 # ───────── Data fetchers ─────────
+def _first(x):
+    """Return first element if x is list-like, else x."""
+    return x[0] if isinstance(x, list) else x
+
 @st.cache_data(ttl=300)
 def get_air_quality(lat, lon):
     url = (
@@ -60,16 +64,25 @@ def get_air_quality(lat, lon):
         f"&timezone={TIMEZONE}"
     )
     j = requests.get(url, timeout=10).json()
-    cur = {k: j["current"][k][0] for k in j["current"] if k != "time"}
-    cur["time"] = dt.datetime.fromisoformat(j["current"]["time"][0])
 
-    t = [dt.datetime.fromisoformat(x) for x in j["hourly"]["time"]]
+    # ---- current block -------------------------------------------------
+    cur_raw = j.get("current", {})
+    cur = {k: _first(v) for k, v in cur_raw.items() if k != "time"}
+    cur_time_raw = _first(cur_raw.get("time", dt.datetime.utcnow().isoformat()))
+    cur["time"] = dt.datetime.fromisoformat(cur_time_raw)
+
+    # ---- hourly block --------------------------------------------------
+    hr_raw = j.get("hourly", {})
+    times = [dt.datetime.fromisoformat(t) for t in hr_raw.get("time", [])]
+    def series(name):
+        vals = hr_raw.get(name, [])
+        return [None]*len(times) if not vals else vals
     hourly = {
-        "time": t,
-        "pm10": j["hourly"]["pm10"],
-        "pm2_5": j["hourly"]["pm2_5"],
-        "no2":  j["hourly"]["nitrogen_dioxide"],
-        "so2":  j["hourly"]["sulphur_dioxide"],
+        "time": times,
+        "pm10": series("pm10"),
+        "pm2_5": series("pm2_5"),
+        "no2":  series("nitrogen_dioxide"),
+        "so2":  series("sulphur_dioxide"),
     }
     return cur, hourly
 
@@ -85,9 +98,9 @@ def get_hourly_temps(lat, lon):
     times = [dt.datetime.fromisoformat(t) for t in j["hourly"]["time"]]
     return {"time": times, "temp": j["hourly"]["temperature_2m"]}
 
-# ───────── Bucket rules (exact ranges you gave) ─────────
-def make_rules(ranges):
-    return [(lo, hi, lab, col) for lo, hi, lab, col in ranges]
+# ───────── Bucket rules (exact ranges) ─────────
+def make_rules(r):
+    return [(lo, hi, lab, col) for lo, hi, lab, col in r]
 
 PM25_RULES = make_rules([
     (0, 10,   "Good",            "green"),
@@ -98,12 +111,12 @@ PM25_RULES = make_rules([
     (75, 800, "Extremely poor",  "darkred"),
 ])
 PM10_RULES = make_rules([
-    (0, 20,    "Good",            "green"),
-    (20, 40,   "Fair",            "limegreen"),
-    (40, 50,   "Moderate",        "yellow"),
-    (50, 100,  "Poor",            "orange"),
-    (100, 150, "Very poor",       "red"),
-    (150, 1200,"Extremely poor",  "darkred"),
+    (0, 20,   "Good",            "green"),
+    (20, 40,  "Fair",            "limegreen"),
+    (40, 50,  "Moderate",        "yellow"),
+    (50, 100, "Poor",            "orange"),
+    (100, 150,"Very poor",       "red"),
+    (150, 1200,"Extremely poor", "darkred"),
 ])
 NO2_RULES = make_rules([
     (0, 40,   "Good",            "green"),
@@ -131,11 +144,13 @@ EU_AQI_RULES = [
 
 def classify(v, rules):
     for lo, hi, lab, col in rules:
-        if lo <= v < hi:
+        if v is not None and lo <= v < hi:
             return lab, col
-    return "?", "grey"
+    return "No data", "grey"
 
 def bar(df, title, vmax, rules):
+    if df.empty:
+        return alt.Chart(pd.DataFrame({"day":[],"value":[]}))
     df = df.copy()
     df["bucket"], df["colour"] = zip(*df["value"].map(lambda v: classify(v, rules)))
     return (
@@ -160,11 +175,11 @@ with aq_tab:
 
     current, hr = get_air_quality(LATITUDE, LONGITUDE)
 
-    # --- Current conditions panel ---
-    st.subheader(f"Current conditions – {current['time'].strftime('%H:%M')}")
-    aqi_val = current["european_aqi"]
+    # --- Current panel ---
+    st.subheader(f"Current – {current['time'].strftime('%H:%M')}")
+    aqi_val = current.get("european_aqi")
     aqi_label, aqi_color = classify(aqi_val, EU_AQI_RULES)
-    st.metric("European AQI", f"{aqi_val:.0f}", aqi_label, delta_color="off")
+    st.metric("European AQI", f"{aqi_val or '–'}", aqi_label, delta_color="off")
     st.write(f"<div style='height:10px;background:{aqi_color}'></div>", unsafe_allow_html=True)
 
     cols = st.columns(3)
@@ -176,10 +191,10 @@ with aq_tab:
             ("NO₂ µg/m³",   "nitrogen_dioxide", NO2_RULES),
         ],
     ):
-        val = current[key]
+        val = current.get(key)
         label, color = classify(val, rules)
         with c:
-            st.metric(lbl, f"{val:.0f}", label, delta_color="off")
+            st.metric(lbl, f"{val:.0f}" if val is not None else "–", label, delta_color="off")
             st.write(f"<div style='height:6px;background:{color}'></div>", unsafe_allow_html=True)
 
     st.divider()
@@ -188,10 +203,10 @@ with aq_tab:
     aggs = {p: {} for p in ["pm10", "pm2_5", "no2", "so2"]}
     for t, v10, v25, n, s in zip(hr["time"], hr["pm10"], hr["pm2_5"], hr["no2"], hr["so2"]):
         d = t.date()
-        aggs["pm10"][d] = max(v10, aggs["pm10"].get(d, -1))
-        aggs["pm2_5"][d] = max(v25, aggs["pm2_5"].get(d, -1))
-        aggs["no2"][d]  = max(n, aggs["no2"].get(d, -1))
-        aggs["so2"][d]  = max(s, aggs["so2"].get(d, -1))
+        if v10 is not None: aggs["pm10"][d] = max(v10, aggs["pm10"].get(d, -1))
+        if v25 is not None: aggs["pm2_5"][d] = max(v25, aggs["pm2_5"].get(d, -1))
+        if n   is not None: aggs["no2"][d]  = max(n,   aggs["no2"].get(d, -1))
+        if s   is not None: aggs["so2"][d]  = max(s,   aggs["so2"].get(d, -1))
 
     def make_df(series):
         return pd.DataFrame(
