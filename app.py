@@ -1,4 +1,4 @@
-# app.py · Cool Assistant – Multi-Pollutant AQI & Temperature (Open-Meteo)
+# app.py · Cool Assistant – Real-time AQI & Multi-Pollutant Charts (Open-Meteo)
 import datetime as dt
 import random
 import requests
@@ -14,7 +14,6 @@ LATITUDE  = 36.1912
 LONGITUDE = 44.0094
 TIMEZONE  = "auto"
 HOURS_TO_SHOW = 24
-
 st.set_page_config(page_title="Cool Assistant", layout="wide")
 
 # ─────── AUTH & SIDEBAR ───────
@@ -28,8 +27,8 @@ with st.sidebar:
 # ───────── HEADER ─────────
 st.title("🏠 Cool Assistant")
 st.caption(
-    "Real-time **European AQI** and 24-hour heat/dust outlook for the Kurdistan Region "
-    "(data from Open-Meteo)."
+    "Real-time **European AQI** and 24-h heat/dust outlook for the Kurdistan Region "
+    "— data from Open-Meteo’s free API."
 )
 st.subheader("💡 Daily Tip")
 st.write(
@@ -54,26 +53,23 @@ def get_air_quality(lat, lon):
     url = (
         "https://air-quality-api.open-meteo.com/v1/air-quality"
         f"?latitude={lat}&longitude={lon}"
-        "&hourly=pm10,pm2_5,nitrogen_dioxide,sulphur_dioxide,"
-        "aerosol_optical_depth,dust,ammonia,methane"
+        "&hourly=pm10,pm2_5,nitrogen_dioxide,sulphur_dioxide"
+        ",aerosol_optical_depth,dust,ammonia,methane,ozone"
         "&current=aerosol_optical_depth,dust,european_aqi,pm10,pm2_5,nitrogen_dioxide"
         "&past_days=5"
         f"&timezone={TIMEZONE}"
     )
     j = requests.get(url, timeout=10).json()
-
-    # current
     cur = {k: j["current"][k][0] for k in j["current"] if k != "time"}
     cur["time"] = dt.datetime.fromisoformat(j["current"]["time"][0])
 
-    # hourly
     t = [dt.datetime.fromisoformat(x) for x in j["hourly"]["time"]]
     hourly = {
         "time": t,
         "pm10": j["hourly"]["pm10"],
         "pm2_5": j["hourly"]["pm2_5"],
-        "no2": j["hourly"]["nitrogen_dioxide"],
-        "so2": j["hourly"]["sulphur_dioxide"],
+        "no2":  j["hourly"]["nitrogen_dioxide"],
+        "so2":  j["hourly"]["sulphur_dioxide"],
     }
     return cur, hourly
 
@@ -89,45 +85,48 @@ def get_hourly_temps(lat, lon):
     times = [dt.datetime.fromisoformat(t) for t in j["hourly"]["time"]]
     return {"time": times, "temp": j["hourly"]["temperature_2m"]}
 
-# ───────── Classification tables ─────────
-EU_AQI_RULES = [
-    (0, 25,   "Good",      "green"),
-    (25, 50,  "Fair",      "limegreen"),
-    (50, 75,  "Moderate",  "yellow"),
-    (75, 100, "Poor",      "orange"),
-    (100, 1e9,"Very poor", "red"),
-]
-PM25_RULES = [
+# ───────── Bucket rules (exact ranges you gave) ─────────
+def make_rules(ranges):
+    return [(lo, hi, lab, col) for lo, hi, lab, col in ranges]
+
+PM25_RULES = make_rules([
     (0, 10,   "Good",            "green"),
     (10, 20,  "Fair",            "limegreen"),
     (20, 25,  "Moderate",        "yellow"),
     (25, 50,  "Poor",            "orange"),
     (50, 75,  "Very poor",       "red"),
     (75, 800, "Extremely poor",  "darkred"),
-]
-PM10_RULES = [
-    (0, 20,   "Good",            "green"),
-    (20, 40,  "Fair",            "limegreen"),
-    (40, 50,  "Moderate",        "yellow"),
-    (50, 100, "Poor",            "orange"),
-    (100, 150,"Very poor",       "red"),
-    (150, 1200,"Extremely poor", "darkred"),
-]
-NO2_RULES = [
+])
+PM10_RULES = make_rules([
+    (0, 20,    "Good",            "green"),
+    (20, 40,   "Fair",            "limegreen"),
+    (40, 50,   "Moderate",        "yellow"),
+    (50, 100,  "Poor",            "orange"),
+    (100, 150, "Very poor",       "red"),
+    (150, 1200,"Extremely poor",  "darkred"),
+])
+NO2_RULES = make_rules([
     (0, 40,   "Good",            "green"),
     (40, 90,  "Fair",            "limegreen"),
     (90, 120, "Moderate",        "yellow"),
     (120, 230,"Poor",            "orange"),
     (230, 340,"Very poor",       "red"),
     (340, 1000,"Extremely poor", "darkred"),
-]
-SO2_RULES = [
+])
+SO2_RULES = make_rules([
     (0, 100,   "Good",            "green"),
     (100, 200, "Fair",            "limegreen"),
     (200, 350, "Moderate",        "yellow"),
     (350, 500, "Poor",            "orange"),
     (500, 750, "Very poor",       "red"),
     (750, 1250,"Extremely poor",  "darkred"),
+])
+EU_AQI_RULES = [
+    (0, 25,   "Good",      "green"),
+    (25, 50,  "Fair",      "limegreen"),
+    (50, 75,  "Moderate",  "yellow"),
+    (75, 100, "Poor",      "orange"),
+    (100, 1e9,"Very poor", "red"),
 ]
 
 def classify(v, rules):
@@ -136,7 +135,7 @@ def classify(v, rules):
             return lab, col
     return "?", "grey"
 
-def chart(df, title, vmax, rules):
+def bar(df, title, vmax, rules):
     df = df.copy()
     df["bucket"], df["colour"] = zip(*df["value"].map(lambda v: classify(v, rules)))
     return (
@@ -156,12 +155,12 @@ aq_tab, heat_tab = st.tabs(["🌪️ Air-Quality", "🌞 Temperature"])
 
 # ─────── AIR-QUALITY TAB ───────
 with aq_tab:
-    st.header("🌪️ European AQI & Pollutants")
+    st.header("🌪️ European AQI & Key Pollutants")
     st_folium(build_map(LATITUDE, LONGITUDE), use_container_width=True, height=420, key="aq_map")
 
     current, hr = get_air_quality(LATITUDE, LONGITUDE)
 
-    # ----- Current conditions panel -----
+    # --- Current conditions panel ---
     st.subheader(f"Current conditions – {current['time'].strftime('%H:%M')}")
     aqi_val = current["european_aqi"]
     aqi_label, aqi_color = classify(aqi_val, EU_AQI_RULES)
@@ -185,7 +184,7 @@ with aq_tab:
 
     st.divider()
 
-    # ----- 4-day bar-charts -----
+    # --- 4-day bar charts ---
     aggs = {p: {} for p in ["pm10", "pm2_5", "no2", "so2"]}
     for t, v10, v25, n, s in zip(hr["time"], hr["pm10"], hr["pm2_5"], hr["no2"], hr["so2"]):
         d = t.date()
@@ -208,7 +207,7 @@ with aq_tab:
     ]
     for title, df, vmax, table in charts:
         st.subheader(title)
-        st.altair_chart(chart(df, title.split()[0], vmax, table), use_container_width=True)
+        st.altair_chart(bar(df, title.split()[0], vmax, table), use_container_width=True)
 
 # ─────── TEMPERATURE TAB ───────
 with heat_tab:
@@ -217,8 +216,10 @@ with heat_tab:
 
     data = get_hourly_temps(LATITUDE, LONGITUDE)
     now = dt.datetime.now().replace(minute=0, second=0, microsecond=0)
-    next_24 = [(t, temp) for t, temp in zip(data["time"], data["temp"])
-               if now <= t < now + dt.timedelta(hours=HOURS_TO_SHOW)]
+    next_24 = [
+        (t, temp) for t, temp in zip(data["time"], data["temp"])
+        if now <= t < now + dt.timedelta(hours=HOURS_TO_SHOW)
+    ]
 
     st.subheader("Hourly outlook (°C)")
     cols = st.columns(4)
