@@ -1,4 +1,4 @@
-# app.py · Cool Assistant – Heat-Wave & Dust-Storm Helper  (OPEN-METEO version)
+# app.py · Cool Assistant – Hourly Temperature & Multi-Pollutant Forecast (Open-Meteo)
 import datetime as dt
 import random
 import requests
@@ -11,6 +11,8 @@ from auth import handle_authentication
 # ───────── CONFIG ─────────
 st.set_page_config(page_title="Cool Assistant", layout="wide")
 CENTER_LAT, CENTER_LON = 36.206, 44.009        # Kurdistan Region centre
+TIMEZONE = "auto"                              # local tz from Open-Meteo
+HOURS_TO_SHOW = 24                             # upcoming 24 h in heat tab
 
 
 # ─────── AUTH & SIDEBAR ───────
@@ -26,107 +28,122 @@ with st.sidebar:
 # ───────── HEADER ─────────
 st.title("🏠 Cool Assistant")
 st.caption(
-    "Your assistant for **mitigating heat-waves and dust-storms** across the Kurdistan Region."
+    "Hourly **heat** & **dust** outlook for the Kurdistan Region, powered by free Open-Meteo APIs."
 )
 
 st.subheader("💡 Daily Tip")
 st.write(
     random.choice(
         [
-            "Close windows during the midday heat; ventilate late-night / early-morning.",
-            "Hang damp cotton curtains – they pre-filter dust and cool incoming air.",
+            "Ventilate late at night or early morning when outside air is coolest.",
+            "Hang damp cotton curtains – they filter dust and cool incoming air.",
             "Add weather-stripping to doors to keep hot, dusty air outside.",
         ]
     )
 )
 
-# ───────── TABS ─────────
-dust_tab, heat_tab = st.tabs(["🌪️ Dust-Storm Forecast", "🌞 Heat-Wave Forecast"])
 
-
-# ─────── Folium helper ───────
-def build_folium(lat: float, lon: float) -> folium.Map:
-    """Return a simple OpenStreetMap-only map centred on (lat, lon)."""
+# ───────── Folium helper (plain OSM) ─────────
+def build_map(lat: float, lon: float) -> folium.Map:
     m = folium.Map(location=[lat, lon], zoom_start=6)
     folium.Marker([lat, lon], tooltip="Kurdistan Region").add_to(m)
     return m
 
 
-# ─────── Cached fetch helpers (Open-Meteo) ───────
+# ───────── Data fetchers (cached) ─────────
 @st.cache_data(ttl=600)
-def fetch_pm10_daily_max(lat: float, lon: float) -> dict:
-    """Return {date → daily max PM10 µg/m³} for the next 4 days."""
+def get_air_quality(lat: float, lon: float) -> dict:
     url = (
         "https://air-quality-api.open-meteo.com/v1/air-quality"
         f"?latitude={lat}&longitude={lon}"
-        "&hourly=pm10&timezone=auto"
+        "&hourly=pm10,pm2_5,uv_index"
+        f"&timezone={TIMEZONE}"
     )
-    data = requests.get(url, timeout=10).json()
-    times  = data["hourly"]["time"]
-    values = data["hourly"]["pm10"]
-
-    daily = {}
-    for ts, val in zip(times, values):
-        day = dt.datetime.fromisoformat(ts).date()
-        daily[day] = max(val, daily.get(day, -1))
-    return daily
+    j = requests.get(url, timeout=10).json()
+    times = [dt.datetime.fromisoformat(t) for t in j["hourly"]["time"]]
+    data = {
+        "pm10": j["hourly"]["pm10"],
+        "pm2_5": j["hourly"]["pm2_5"],
+        "uv": j["hourly"]["uv_index"],
+        "time": times,
+    }
+    return data
 
 
 @st.cache_data(ttl=600)
-def fetch_daily_highs(lat: float, lon: float) -> dict:
-    """Return {date → daily max °C} for the next 5 days."""
+def get_hourly_temps(lat: float, lon: float) -> dict:
     url = (
         "https://api.open-meteo.com/v1/forecast"
         f"?latitude={lat}&longitude={lon}"
-        "&daily=temperature_2m_max"
-        "&timezone=auto"
+        "&hourly=temperature_2m"
+        f"&timezone={TIMEZONE}"
     )
-    data = requests.get(url, timeout=10).json()
-    dates = [dt.date.fromisoformat(d) for d in data["daily"]["time"]]
-    temps = data["daily"]["temperature_2m_max"]
-    return dict(zip(dates, temps))
+    j = requests.get(url, timeout=10).json()
+    times = [dt.datetime.fromisoformat(t) for t in j["hourly"]["time"]]
+    temps = j["hourly"]["temperature_2m"]
+    return {"time": times, "temp": temps}
 
 
-# ─────── DUST-STORM TAB ───────
+# ───────── UI TABS ─────────
+dust_tab, heat_tab = st.tabs(["🌪️ Dust / Air-Quality", "🌞 Temperature"])
+
+
+# ─────── DUST / AIR-QUALITY TAB ───────
 with dust_tab:
-    st.header("🌪️ Dust-Storm Risk – Next 4 Days")
-    st.markdown("##### Map view")
-    st_folium(build_folium(CENTER_LAT, CENTER_LON), use_container_width=True, height=480)
+    st.header("🌪️ Dust & Air-Quality – next 4 days (daily maxima)")
+    st_folium(build_map(CENTER_LAT, CENTER_LON), use_container_width=True, height=420)
 
-    with st.spinner("Loading dust forecast…"):
-        try:
-            pm10 = fetch_pm10_daily_max(CENTER_LAT, CENTER_LON)
-            for day, value in list(pm10.items())[:4]:
-                risk = (
-                    "🔴 Very High" if value >= 300
-                    else "🟠 High" if value >= 200
-                    else "🟡 Moderate" if value >= 100
-                    else "🟢 Low"
-                )
-                st.metric(day.strftime("%a %d %b"), f"{value:.0f} µg/m³", risk)
-        except Exception as e:
-            st.error(f"Dust forecast failed → {e}")
+    aq = get_air_quality(CENTER_LAT, CENTER_LON)
+
+    # Aggregate daily maxima for PM10 & PM2.5
+    pm10_daily, pm25_daily, uv_daily = {}, {}, {}
+    for t, v10, v25, uv in zip(aq["time"], aq["pm10"], aq["pm2_5"], aq["uv"]):
+        day = t.date()
+        pm10_daily[day] = max(v10, pm10_daily.get(day, -1))
+        pm25_daily[day] = max(v25, pm25_daily.get(day, -1))
+        uv_daily[day] = max(uv, uv_daily.get(day, -1))
+
+    st.subheader("PM10")
+    for day, val in list(pm10_daily.items())[:4]:
+        risk = (
+            "🔴 Very High" if val >= 300 else
+            "🟠 High"      if val >= 200 else
+            "🟡 Moderate"  if val >= 100 else
+            "🟢 Low"
+        )
+        st.metric(day.strftime("%a %d %b"), f"{val:.0f} µg/m³", risk)
+
+    st.subheader("PM2.5")
+    for day, val in list(pm25_daily.items())[:4]:
+        risk = (
+            "🔴 VH" if val >= 150 else
+            "🟠 H"  if val >= 90  else
+            "🟡 M"  if val >= 55  else
+            "🟢 L"
+        )
+        st.metric(day.strftime("%a %d %b"), f"{val:.0f} µg/m³", risk)
+
+    today = dt.date.today()
+    uv_val = uv_daily.get(today)
+    if uv_val is not None:
+        st.info(f"**Today’s peak UV index:** {uv_val:.1f}")
 
 
-# ─────── HEAT-WAVE TAB ───────
+# ─────── TEMPERATURE TAB ───────
 with heat_tab:
-    st.header("🌞 Heat-Wave Outlook – Next 5 Days")
-    st.markdown("##### Map view")
-    st_folium(build_folium(CENTER_LAT, CENTER_LON), use_container_width=True, height=480)
+    st.header("🌞 Upcoming 24-hour Temperature")
+    st_folium(build_map(CENTER_LAT, CENTER_LON), use_container_width=True, height=420)
 
-    with st.spinner("Loading temperature forecast…"):
-        try:
-            highs = fetch_daily_highs(CENTER_LAT, CENTER_LON)
-            thresholds = {"Heat-Wave": 43, "Warning": 38}
-            for day, tmax in list(highs.items())[:5]:
-                status = (
-                    "🔥 Heat-Wave" if tmax >= thresholds["Heat-Wave"]
-                    else "⚠️ Hot"  if tmax >= thresholds["Warning"]
-                    else "🙂 Warm"
-                )
-                st.metric(day.strftime("%a %d %b"), f"{tmax:.1f} °C", status)
-        except Exception as e:
-            st.error(f"Temperature forecast failed → {e}")
+    data = get_hourly_temps(CENTER_LAT, CENTER_LON)
+    now = dt.datetime.now().replace(minute=0, second=0, microsecond=0)
+    next_24 = [(t, temp) for t, temp in zip(data["time"], data["temp"]) if now <= t < now + dt.timedelta(hours=HOURS_TO_SHOW)]
+
+    # Simple textual timeline (replace with chart later if you wish)
+    st.subheader("Hourly outlook (°C)")
+    cols = st.columns(4)
+    for i, (t, temp) in enumerate(next_24):
+        with cols[i % 4]:
+            st.write(f"{t.strftime('%H:%M')}: **{temp:.1f}°C**")
 
 
 # ─────── FOOTER ───────
