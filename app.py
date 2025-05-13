@@ -1,9 +1,11 @@
-# app.py · Cool Assistant — Current AQI & 24-h Temperature (Open-Meteo)
+# app.py · Cool Assistant — Live AQI & 24-h Temperature (Open-Meteo)
 import datetime as dt
 import random
 import requests
 import streamlit as st
 import folium
+import pandas as pd
+import altair as alt
 from streamlit_folium import st_folium
 from auth import handle_authentication
 
@@ -23,7 +25,7 @@ with st.sidebar:
 
 # ───────── HEADER ─────────
 st.title("🏠 Cool Assistant")
-st.caption("Real-time **European AQI** and 24-hour temperature outlook for Kurdistan (Open-Meteo).")
+st.caption("European AQI and next-24-hour temperature for Kurdistan (Open-Meteo).")
 st.subheader("💡 Daily Tip")
 st.write(random.choice([
     "Ventilate late-night or early-morning for coolest air.",
@@ -66,9 +68,9 @@ def fetch_temps(lat, lon):
     times = [dt.datetime.fromisoformat(t) for t in j["hourly"]["time"]]
     return {"time": times, "temp": j["hourly"]["temperature_2m"]}
 
-# ───────── EU-AQI bucket tables ─────────
-AQI_R = [(0,25,"Good","green"),(25,50,"Fair","limegreen"),(50,75,"Moderate","yellow"),
-         (75,100,"Poor","orange"),(100,1e9,"Very poor","red")]
+# ───────── Buckets (exact EU ranges) ─────────
+AQI_R  = [(0,25,"Good","green"),(25,50,"Fair","limegreen"),(50,75,"Moderate","yellow"),
+          (75,100,"Poor","orange"),(100,1e9,"Very poor","red")]
 PM25_R = [(0,10,"Good","green"),(10,20,"Fair","limegreen"),(20,25,"Moderate","yellow"),
           (25,50,"Poor","orange"),(50,75,"Very poor","red"),(75,800,"Extremely poor","darkred")]
 PM10_R = [(0,20,"Good","green"),(20,40,"Fair","limegreen"),(40,50,"Moderate","yellow"),
@@ -92,14 +94,12 @@ with aq_tab:
 
     cur = fetch_air(LATITUDE, LONGITUDE)
 
-    # Current AQI panel
     st.subheader(f"Current — {cur['time'].strftime('%H:%M')}")
     aqi_val = cur.get("european_aqi")
     aqi_lab, aqi_col = bucket(aqi_val, AQI_R)
     st.metric("European AQI", f"{aqi_val or '–'}", aqi_lab, delta_color="off")
     st.write(f"<div style='height:10px;background:{aqi_col}'></div>", unsafe_allow_html=True)
 
-    # Current pollutants
     cols = st.columns(3)
     for c, (lbl, key, tbl) in zip(
         cols,
@@ -115,7 +115,7 @@ with aq_tab:
 
 # ─────── TEMPERATURE TAB ───────
 with temp_tab:
-    st.header("🌞 Temperature — Next 24 h")
+    st.header("🌞 Temperature — Next 24 hours")
     st_folium(make_map(LATITUDE, LONGITUDE), use_container_width=True, height=420, key="map_temp")
 
     tdata = fetch_temps(LATITUDE, LONGITUDE)
@@ -123,11 +123,18 @@ with temp_tab:
     next_24 = [(t, v) for t, v in zip(tdata["time"], tdata["temp"])
                if now <= t < now + dt.timedelta(hours=HOURS_TO_SHOW)]
 
-    st.subheader("Hourly outlook (°C)")
-    cols = st.columns(4)
-    for i, (t, v) in enumerate(next_24):
-        with cols[i % 4]:
-            st.write(f"{t.strftime('%H:%M')}: **{v:.1f}°C**")
+    # Line chart
+    if next_24:
+        df = pd.DataFrame(next_24, columns=["time", "temp"])
+        line = (alt.Chart(df)
+                  .mark_line(point=True)
+                  .encode(x=alt.X("time:T", axis=alt.Axis(format="%H:%M", title="")),
+                          y=alt.Y("temp:Q", title="°C"),
+                          tooltip=[alt.Tooltip("time:T", format="%H:%M"), "temp"])
+                  .properties(width=680, height=280))
+        st.altair_chart(line, use_container_width=True)
+    else:
+        st.info("Temperature data unavailable.")
 
 # ─────── FOOTER ───────
 st.markdown("---")
