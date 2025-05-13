@@ -1,4 +1,4 @@
-# app.py · Cool Assistant — Accurate Browser GPS Survey
+# app.py · Cool Assistant — Accurate Nominatim Location + Button Survey
 import datetime as dt
 import requests
 import streamlit as st
@@ -6,8 +6,9 @@ from auth import handle_authentication
 
 # ───────── CONFIG ─────────
 st.set_page_config(page_title="Cool Assistant Survey", layout="centered")
+NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 
-# ───────── AUTHENTICATION ─────────
+# ───────── AUTH ─────────
 handle_authentication()
 user = st.experimental_user
 
@@ -21,107 +22,86 @@ with st.sidebar:
 
 # ───────── SESSION STATE ─────────
 state = st.session_state
-state.setdefault("location", "")
-state.setdefault("latlon", None)
+state.setdefault("loc_query", "")
+state.setdefault("loc_choices", [])   # list of dicts from Nominatim
+state.setdefault("loc_choice_idx", -1)
 state.setdefault("feeling", None)
 state.setdefault("issues", set())
 
-# ───────── JAVASCRIPT GEOLOCATION INJECTION ─────────
-def get_browser_location():
-    js_code = """
-    <script>
-    function sendLocation(pos) {
-        const lat = pos.coords.latitude.toFixed(6);
-        const lon = pos.coords.longitude.toFixed(6);
-        const coords = {lat, lon};
-        const input = window.parent.document.querySelector('input[data-testid="stSessionState-hidden"]');
-        if (input) {
-            input.value = JSON.stringify(coords);
-            input.dispatchEvent(new Event("input", {bubbles: true}));
-        }
-    }
-    function noLocation(err) { console.warn('ERROR(' + err.code + '): ' + err.message); }
-    navigator.geolocation.getCurrentPosition(sendLocation, noLocation);
-    </script>
-    """
-    placeholder = st.empty()
-    placeholder.markdown(js_code, unsafe_allow_html=True)
-    coords = st.text_input("hidden", "", key="hidden", label_visibility="collapsed")
-    if coords:
-        return eval(coords)
-    return None
-
-# ───────── REVERSE GEOCODING ─────────
-def reverse_geocode(lat, lon):
-    url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json"
+# ───────── HELPERS ─────────
+def nominatim_search(query: str):
+    """Return list of place dicts [{'display_name', 'lat','lon'}..]."""
+    params = {"q": query, "format": "json", "limit": 5, "addressdetails": 0}
     try:
-        r = requests.get(url, timeout=5, headers={"User-Agent": "coolassistant"}).json()
-        addr = r.get("address", {})
-        city = addr.get("city") or addr.get("town") or addr.get("village", "")
-        region = addr.get("state", "")
-        country = addr.get("country", "")
-        name = ", ".join(p for p in [city, region, country] if p)
-        return name or f"{lat:.3f}, {lon:.3f}"
-    except:
-        return f"{lat:.3f}, {lon:.3f}"
+        resp = requests.get(NOMINATIM_URL, params=params, timeout=5,
+                            headers={"User-Agent": "coolassistant"})
+        return resp.json()
+    except Exception:
+        return []
 
-# ───────── SURVEY PAGE ─────────
-st.title("🌡️ Weather Feeling Survey")
+# ───────── UI ─────────
+st.title("🌡️ Real-Time Weather Feeling Survey")
 
-# 1️⃣ LOCATION AUTO-FILL
-st.markdown("#### 📍 Your Location")
-if not state.location:
-    location_data = get_browser_location()
-    if location_data:
-        lat, lon = location_data['lat'], location_data['lon']
-        state.latlon = (lat, lon)
-        state.location = reverse_geocode(lat, lon)
-        st.toast(f"Detected location: {state.location}", icon="📍")
+# 1️⃣  Location search
+st.markdown("#### 1. Pick your exact location")
+state.loc_query = st.text_input("Start typing…", value=state.loc_query)
+if len(state.loc_query) >= 3:
+    state.loc_choices = nominatim_search(state.loc_query)
+else:
+    state.loc_choices = []
 
-state.location = st.text_input("Location", value=state.location, key="location_manual")
+# list choices as buttons
+for i, place in enumerate(state.loc_choices):
+    label = place["display_name"]
+    if st.button(label, key=f"loc_{i}", type="primary" if i == state.loc_choice_idx else "secondary"):
+        state.loc_choice_idx = i
 
-if not state.location:
-    st.info("Please allow location access or enter manually.")
+if state.loc_choice_idx >= 0:
+    sel = state.loc_choices[state.loc_choice_idx]
+    st.success(f"Chosen: **{sel['display_name']}**  "
+               f"(lat {float(sel['lat']):.4f}, lon {float(sel['lon']):.4f})")
 
-# 2️⃣ FEELING BUTTONS
-st.markdown("#### 😊 How do you feel right now?")
-feelings = ["😃 Good", "😐 Neutral", "☹️ Uncomfortable", "😫 Bad"]
-cols = st.columns(len(feelings))
-for i, f in enumerate(feelings):
-    selected = state.feeling == f
-    if cols[i].button(f, key=f"feel_{i}", type="primary" if selected else "secondary"):
-        state.feeling = f
+# 2️⃣  Feeling
+st.markdown("#### 2. Your overall feeling")
+feels = ["😃 Good", "😐 Neutral", "☹️ Uncomfortable", "😫 Bad"]
+fcols = st.columns(len(feels))
+for i, lab in enumerate(feels):
+    if fcols[i].button(lab, key=f"feel_{i}", type="primary" if state.feeling == lab else "secondary"):
+        state.feeling = lab
 if state.feeling:
-    st.success(f"Selected: {state.feeling}")
+    st.success(f"Feeling: {state.feeling}")
 
-# 3️⃣ ISSUES TOGGLE
-st.markdown("#### 🌪️ What’s bothering you?")
-issues = ["🔥 Heat", "🌪️ Dust", "💨 Wind", "🏭 Pollution", "💧 Humidity",
-          "☀️ UV", "⚡ Storms", "🌧️ Rain", "❄️ Cold", "🌫️ Fog"]
+# 3️⃣  Issues
+st.markdown("#### 3. What’s bothering you? (toggle)")
+issues_all = [
+    "🔥 Heat", "🌪️ Dust", "💨 Wind", "🏭 Pollution", "💧 Humidity",
+    "☀️ UV", "⚡ Storms", "🌧️ Rain", "❄️ Cold", "🌫️ Fog"
+]
 icol = st.columns(2)
-for i, issue in enumerate(issues):
+for i, issue in enumerate(issues_all):
     picked = issue in state.issues
     label = ("✅ " if picked else "☐ ") + issue
     if icol[i % 2].button(label, key=f"issue_{i}", type="primary" if picked else "secondary"):
         state.issues.discard(issue) if picked else state.issues.add(issue)
 if state.issues:
-    st.info("Issues: " + ", ".join(state.issues))
+    st.info("Issues: " + ", ".join(sorted(state.issues)))
 
-# 4️⃣ SUBMIT BUTTON
-ready = bool(state.location.strip()) and state.feeling
-if st.button("🚀 Submit Response", type="primary", disabled=not ready):
-    response = {
+# 4️⃣  Submit
+ready = state.loc_choice_idx >= 0 and state.feeling
+if st.button("🚀 Submit", type="primary", disabled=not ready):
+    place = state.loc_choices[state.loc_choice_idx]
+    payload = {
         "Timestamp": dt.datetime.now().isoformat(),
         "User": user.email,
-        "Location": state.location,
-        "Coords": state.latlon,
+        "Location": place["display_name"],
+        "Lat": place["lat"],
+        "Lon": place["lon"],
         "Feeling": state.feeling,
-        "Issues": ", ".join(state.issues),
+        "Issues": ", ".join(sorted(state.issues)),
     }
-    # TODO: save response
-    st.success("Thank you! Your feedback was recorded.")
-    st.json(response)
+    # TODO: store payload (database / sheet / etc.)
+    st.success("Thank you! Your feedback has been recorded.")
+    st.json(payload)
 
-# ───────── FOOTER ─────────
 st.markdown("---")
 st.caption("© 2025 Cool Assistant • Kurdistan Region")
