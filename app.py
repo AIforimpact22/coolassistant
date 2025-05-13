@@ -226,6 +226,6 @@ else:
         width=260,
     )
     st.subheader("پەیوەندی")
-    st.markdown("[info@coolassistant.org](mailto:info@coolassistant.org)")
+    st.markdown("[hawkar.geoscience@gmail.com](mailto:hawkar.geoscience@gmail.com)")
     st.markdown("---")
     st.caption("© 2025 Cool Assistant • هەرێمی کوردستان")
