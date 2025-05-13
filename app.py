@@ -1,16 +1,16 @@
-# app.py · Cool Assistant — Button-Only Weather-Feeling Survey
+# app.py · Cool Assistant — Button-Only Weather Feeling Survey
 import datetime as dt
 import streamlit as st
 from auth import handle_authentication
 
-# ───────────────── CONFIG ─────────────────
+# ───────── CONFIG ─────────
 st.set_page_config(page_title="Cool Assistant Survey", layout="centered")
 
-# ───────────────── AUTH ──────────────────
+# ───────── AUTH ─────────
 handle_authentication()
 user = st.experimental_user
 
-# ───────────────── SIDEBAR ───────────────
+# ───────── SIDEBAR ─────────
 with st.sidebar:
     st.image(
         "https://github.com/AIforimpact22/coolassistant/blob/main/input/cool_logo.png?raw=true",
@@ -21,35 +21,37 @@ with st.sidebar:
     st.write(user.email)
     st.button("Log out", on_click=st.logout)
 
-# ───────────────── SESSION STATE ─────────
+# ───────── SESSION STATE ─────────
 if "feeling" not in st.session_state:
-    st.session_state.feeling = None          # str | None
+    st.session_state.feeling = None         # str
 if "issues" not in st.session_state:
-    st.session_state.issues = set()          # set[str]
+    st.session_state.issues = set()         # set[str]
 
-# ───────────────── MAIN PAGE ─────────────
-st.title("🌡️ How’s the weather *right now*?")
+# ───────── SURVEY UI ─────────
+st.title("🌡️ How do you feel about the weather right now?")
 
-# --- 1. location (text still easiest) ----
-location = st.text_input("📍 Your Location")
+# 1) Location
+location = st.text_input("📍 Location (city / area)")
 
-st.markdown("### 2. Your overall feeling")
-col1, col2, col3, col4 = st.columns(4)
-feel_buttons = {
-    "😃 Good": col1,
-    "😐 Neutral": col2,
-    "☹️ Uncomfortable": col3,
-    "😫 Bad": col4,
-}
-for label, col in feel_buttons.items():
-    if col.button(label):
+# 2) Feeling buttons
+st.markdown("### 1. Select your overall feeling")
+feelings = ["😃 Good", "😐 Neutral", "☹️ Uncomfortable", "😫 Bad"]
+cols = st.columns(len(feelings))
+for i, label in enumerate(feelings):
+    selected = st.session_state.feeling == label
+    if cols[i].button(
+        label,
+        key=f"feel_{i}",
+        type="primary" if selected else "secondary",
+    ):
         st.session_state.feeling = label
 
 if st.session_state.feeling:
-    st.success(f"Selected: **{st.session_state.feeling}**")
+    st.success(f"Selected feeling: **{st.session_state.feeling}**")
 
-st.markdown("### 3. What’s bothering you? *(tap to toggle)*")
-choices = [
+# 3) Issue toggle buttons
+st.markdown("### 2. What’s bothering you? *(tap to toggle)*")
+issues_list = [
     "🔥 High Temperature",
     "🌪️ Dust",
     "💨 Strong Wind",
@@ -61,37 +63,37 @@ choices = [
     "❄️ Cold",
     "🌫️ Fog",
 ]
-# display buttons in a grid of 2 columns
-cols = st.columns(2)
-for i, choice in enumerate(choices):
-    idx = i % 2
-    selected = choice in st.session_state.issues
-    style = "background-color:#4CAF50;color:white;" if selected else ""
-    if cols[idx].button(choice, key=f"issue_{i}", help="click to toggle", type="secondary" if selected else "default"):
-        # toggle
+issue_cols = st.columns(2)
+for i, issue in enumerate(issues_list):
+    selected = issue in st.session_state.issues
+    pressed = issue_cols[i % 2].button(
+        ("✅ " if selected else "☐ ") + issue,
+        key=f"issue_{i}",
+        type="primary" if selected else "secondary",
+    )
+    if pressed:  # toggle state
         if selected:
-            st.session_state.issues.remove(choice)
+            st.session_state.issues.remove(issue)
         else:
-            st.session_state.issues.add(choice)
+            st.session_state.issues.add(issue)
 
 if st.session_state.issues:
-    st.info("Selected issues: " + ", ".join(st.session_state.issues))
+    st.info("Selected issues: " + ", ".join(sorted(st.session_state.issues)))
 
-# --- 4. submit ---------------------------
+# 4) Submit
 ready = location.strip() and st.session_state.feeling
-if st.button("✅ Submit Response", disabled=not ready):
-    timestamp = dt.datetime.now().isoformat()
+if st.button("🚀 Submit Response", type="primary", disabled=not ready):
     response = {
-        "Timestamp": timestamp,
+        "Timestamp": dt.datetime.now().isoformat(),
         "User": user.email,
         "Location": location.strip(),
         "Feeling": st.session_state.feeling,
         "Issues": ", ".join(sorted(st.session_state.issues)),
     }
-    # TODO: persist `response` to a database / sheet
+    # TODO: send `response` to your database / sheet
     st.success("Thank you! Your feedback was recorded.")
     st.json(response)
 
-# footnote
+# ───────── FOOTER ─────────
 st.markdown("---")
 st.caption("© 2025 Cool Assistant • Kurdistan Region")
