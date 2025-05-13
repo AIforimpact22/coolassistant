@@ -111,7 +111,7 @@ if sv.page == "survey":
 
     # هەست
     st.markdown("#### ١. هەستت لەگەڵ هەوای ئێستا چۆنە؟")
-    feelings = ["😃 باشم", "😐 ئاسایی", "☹️ خۆشم نیە", "😫 زۆر کێشم"]
+    feelings = ["😃 زۆر باش", "😐 باش", "☹️ خراپ", "😫 زۆ خراپ"]
     fcols = st.columns(4)
     for i, f in enumerate(feelings):
         if fcols[i].button(f, key=f"f{i}", type="primary" if sv.feeling == f else "secondary"):
