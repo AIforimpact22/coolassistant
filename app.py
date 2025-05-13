@@ -1,4 +1,4 @@
-# app.py · Cool Assistant – Hourly Temperature & Multi-Pollutant Forecast (Open-Meteo)
+# app.py · Cool Assistant – Multi-Pollutant & Temperature (Open-Meteo)
 import datetime as dt
 import random
 import requests
@@ -11,7 +11,7 @@ from auth import handle_authentication
 
 # ───────── CONFIG ─────────
 st.set_page_config(page_title="Cool Assistant", layout="wide")
-CENTER_LAT, CENTER_LON = 36.206, 44.009        # Kurdistan Region centre
+CENTER_LAT, CENTER_LON = 36.1912, 44.0094      # updated lat/lon (Erbil)
 TIMEZONE = "auto"
 HOURS_TO_SHOW = 24
 
@@ -26,7 +26,8 @@ with st.sidebar:
 # ───────── HEADER ─────────
 st.title("🏠 Cool Assistant")
 st.caption(
-    "Hourly **heat** & **dust** outlook for the Kurdistan Region, powered by free Open-Meteo APIs."
+    "24-hour **heat** & multi-pollutant air-quality outlook for the Kurdistan Region "
+    "(data from Open-Meteo)."
 )
 st.subheader("💡 Daily Tip")
 st.write(
@@ -40,31 +41,34 @@ st.write(
 )
 
 # ───────── Folium helper ─────────
-def build_map(lat: float, lon: float) -> folium.Map:
+def build_map(lat, lon):
     m = folium.Map(location=[lat, lon], zoom_start=6)
     folium.Marker([lat, lon], tooltip="Kurdistan Region").add_to(m)
     return m
 
 # ───────── Data fetchers ─────────
-@st.cache_data(ttl=600)
-def get_air_quality(lat: float, lon: float) -> dict:
+@st.cache_data(ttl=900)
+def get_air_quality(lat, lon):
     url = (
         "https://air-quality-api.open-meteo.com/v1/air-quality"
         f"?latitude={lat}&longitude={lon}"
-        "&hourly=pm10,pm2_5,uv_index"
+        "&hourly=pm10,pm2_5,nitrogen_dioxide,sulphur_dioxide"
+        ",aerosol_optical_depth,dust,ammonia,methane"
+        "&past_days=5"
         f"&timezone={TIMEZONE}"
     )
     j = requests.get(url, timeout=10).json()
-    times = [dt.datetime.fromisoformat(t) for t in j["hourly"]["time"]]
+    t = [dt.datetime.fromisoformat(x) for x in j["hourly"]["time"]]
     return {
+        "time": t,
         "pm10": j["hourly"]["pm10"],
         "pm2_5": j["hourly"]["pm2_5"],
-        "uv": j["hourly"]["uv_index"],
-        "time": times,
+        "no2": j["hourly"]["nitrogen_dioxide"],
+        "so2": j["hourly"]["sulphur_dioxide"],
     }
 
 @st.cache_data(ttl=600)
-def get_hourly_temps(lat: float, lon: float) -> dict:
+def get_hourly_temps(lat, lon):
     url = (
         "https://api.open-meteo.com/v1/forecast"
         f"?latitude={lat}&longitude={lon}"
@@ -76,26 +80,45 @@ def get_hourly_temps(lat: float, lon: float) -> dict:
     return {"time": times, "temp": j["hourly"]["temperature_2m"]}
 
 # ───────── EU-AQI bucket rules ─────────
-PM10_RULES = [
-    (0, 20,   "Good",            "green"),
-    (20, 40,  "Fair",            "limegreen"),
-    (40, 50,  "Moderate",        "yellow"),
-    (50, 100, "Poor",            "orange"),
-    (100, 150,"Very poor",       "red"),
-    (150, 1200,"Extremely poor", "darkred"),
-]
-PM25_RULES = [
+def buckets(ranges):
+    return [(lo, hi, lab, col) for (lo, hi, lab, col) in ranges]
+
+PM25_RULES = buckets([
     (0, 10,   "Good",            "green"),
     (10, 20,  "Fair",            "limegreen"),
     (20, 25,  "Moderate",        "yellow"),
     (25, 50,  "Poor",            "orange"),
     (50, 75,  "Very poor",       "red"),
     (75, 800, "Extremely poor",  "darkred"),
-]
+])
+PM10_RULES = buckets([
+    (0, 20,   "Good",            "green"),
+    (20, 40,  "Fair",            "limegreen"),
+    (40, 50,  "Moderate",        "yellow"),
+    (50, 100, "Poor",            "orange"),
+    (100, 150,"Very poor",       "red"),
+    (150, 1200,"Extremely poor", "darkred"),
+])
+NO2_RULES = buckets([
+    (0, 40,   "Good",            "green"),
+    (40, 90,  "Fair",            "limegreen"),
+    (90, 120, "Moderate",        "yellow"),
+    (120, 230,"Poor",            "orange"),
+    (230, 340,"Very poor",       "red"),
+    (340, 1000,"Extremely poor", "darkred"),
+])
+SO2_RULES = buckets([
+    (0, 100,  "Good",            "green"),
+    (100, 200,"Fair",            "limegreen"),
+    (200, 350,"Moderate",        "yellow"),
+    (350, 500,"Poor",            "orange"),
+    (500, 750,"Very poor",       "red"),
+    (750, 1250,"Extremely poor", "darkred"),
+])
 
 def classify(v, rules):
-    for low, high, label, colour in rules:
-        if low <= v < high:
+    for lo, hi, label, colour in rules:
+        if lo <= v < hi:
             return label, colour
     return "?", "grey"
 
@@ -119,38 +142,40 @@ dust_tab, heat_tab = st.tabs(["🌪️ Dust / Air-Quality", "🌞 Temperature"])
 
 # ─────── DUST / AIR-QUALITY TAB ───────
 with dust_tab:
-    st.header("🌪️ Dust & Air-Quality – next 4 days")
+    st.header("🌪️ Multi-Pollutant Air Quality – next 4 days")
     st_folium(build_map(CENTER_LAT, CENTER_LON), use_container_width=True, height=420, key="dust_map")
 
     aq = get_air_quality(CENTER_LAT, CENTER_LON)
 
-    # Aggregate daily maxima
-    pm10_daily, pm25_daily, uv_daily = {}, {}, {}
-    for t, v10, v25, uv in zip(aq["time"], aq["pm10"], aq["pm2_5"], aq["uv"]):
+    # Aggregate daily maxima / peaks
+    aggs = {p: {} for p in ["pm10", "pm2_5", "no2", "so2"]}
+    for t, v10, v25, n, s in zip(
+        aq["time"], aq["pm10"], aq["pm2_5"], aq["no2"], aq["so2"]
+    ):
         d = t.date()
-        pm10_daily[d] = max(v10, pm10_daily.get(d, -1))
-        pm25_daily[d] = max(v25, pm25_daily.get(d, -1))
-        uv_daily[d] = max(uv, uv_daily.get(d, -1))
+        aggs["pm10"][d] = max(v10, aggs["pm10"].get(d, -1))
+        aggs["pm2_5"][d] = max(v25, aggs["pm2_5"].get(d, -1))
+        aggs["no2"][d] = max(n, aggs["no2"].get(d, -1))
+        aggs["so2"][d] = max(s, aggs["so2"].get(d, -1))
 
-    # DataFrames for charts
-    pm10_df = pd.DataFrame(
-        {"day": [d.strftime("%a %d %b") for d in list(pm10_daily)[:4]],
-         "value": list(pm10_daily.values())[:4]}
-    )
-    pm25_df = pd.DataFrame(
-        {"day": [d.strftime("%a %d %b") for d in list(pm25_daily)[:4]],
-         "value": list(pm25_daily.values())[:4]}
-    )
+    def make_df(series):
+        return pd.DataFrame(
+            {
+                "day": [d.strftime("%a %d %b") for d in list(series)[:4]],
+                "value": list(series.values())[:4],
+            }
+        )
 
-    st.subheader("PM10 (µg/m³)")
-    st.altair_chart(bar_chart(pm10_df, "PM10", 1200, PM10_RULES), use_container_width=True)
+    charts = [
+        ("PM2.5 (µg/m³)", make_df(aggs["pm2_5"]), 800, PM25_RULES),
+        ("PM10 (µg/m³)",  make_df(aggs["pm10"]),  1200, PM10_RULES),
+        ("NO₂ (µg/m³)",   make_df(aggs["no2"]),   1000, NO2_RULES),
+        ("SO₂ (µg/m³)",   make_df(aggs["so2"]),   1250, SO2_RULES),
+    ]
 
-    st.subheader("PM2.5 (µg/m³)")
-    st.altair_chart(bar_chart(pm25_df, "PM2.5", 800, PM25_RULES), use_container_width=True)
-
-    today = dt.date.today()
-    if (uv_val := uv_daily.get(today)) is not None:
-        st.info(f"**Today’s peak UV index:** {uv_val:.1f}")
+    for title, df, vmax, rules in charts:
+        st.subheader(title)
+        st.altair_chart(bar_chart(df, title.split()[0], vmax, rules), use_container_width=True)
 
 # ─────── TEMPERATURE TAB ───────
 with heat_tab:
