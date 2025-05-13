@@ -1,4 +1,4 @@
-# app.py · Cool Assistant — Map-Click Survey + Postgres storage
+# app.py · Cool Assistant — Survey (Q1+Q2 first, map after) + Postgres storage
 import datetime as dt
 import requests
 import psycopg2
@@ -7,43 +7,35 @@ import folium
 from streamlit_folium import st_folium
 from auth import handle_authentication
 
-# ───────── DATABASE CONFIG ─────────
-PG_URL = "postgresql://cool_owner:npg_jpi5LdZUbvw1@ep-frosty-tooth-a283lla4-pooler.eu-central-1.aws.neon.tech/cool?sslmode=require"
+# ─────────── DATABASE  ───────────
+PG_URL = (
+    "postgresql://cool_owner:npg_jpi5LdZUbvw1@"
+    "ep-frosty-tooth-a283lla4-pooler.eu-central-1.aws.neon.tech/cool?sslmode=require"
+)
 TABLE = "survey_responses"
 
-def save_to_db(record: dict):
-    """Create table if needed and insert a row."""
-    create_sql = f"""
-    CREATE TABLE IF NOT EXISTS {TABLE} (
-      ts          TIMESTAMPTZ,
-      user_email  TEXT,
-      location    TEXT,
-      lat         DOUBLE PRECISION,
-      lon         DOUBLE PRECISION,
-      feeling     TEXT,
-      issues      TEXT
-    );
-    """
-    insert_sql = f"""
-    INSERT INTO {TABLE} (ts,user_email,location,lat,lon,feeling,issues)
-    VALUES (%(Timestamp)s, %(User)s, %(Location)s, %(Lat)s, %(Lon)s,
-            %(Feeling)s, %(Issues)s);
-    """
+def save_to_db(row: dict):
+    create = f"""CREATE TABLE IF NOT EXISTS {TABLE}(
+        ts TIMESTAMPTZ,user_email TEXT,location TEXT,lat DOUBLE PRECISION,
+        lon DOUBLE PRECISION,feeling TEXT,issues TEXT);"""
+    insert = f"""INSERT INTO {TABLE}
+        (ts,user_email,location,lat,lon,feeling,issues)
+        VALUES (%(ts)s,%(user)s,%(location)s,%(lat)s,%(lon)s,%(feeling)s,%(issues)s);"""
     try:
-        with psycopg2.connect(PG_URL) as conn:
-            with conn.cursor() as cur:
-                cur.execute(create_sql)
-                cur.execute(insert_sql, record)
-        st.toast("Saved to database ✅")
+        with psycopg2.connect(PG_URL) as con:
+            with con.cursor() as cur:
+                cur.execute(create)
+                cur.execute(insert, row)
+        st.toast("Saved ✅")
     except Exception as e:
-        st.error(f"Database error: {e}")
+        st.error(f"DB error: {e}")
 
-# ───────── STREAMLIT CONFIG ─────────
+# ────────── STREAMLIT CONFIG ──────────
 st.set_page_config(page_title="Cool Assistant Survey", layout="centered")
 handle_authentication()
 user = st.experimental_user
 
-# ───────── SIDEBAR ─────────
+# ────────── SIDEBAR ──────────
 with st.sidebar:
     st.image(
         "https://github.com/AIforimpact22/coolassistant/blob/main/input/cool_logo.png?raw=true",
@@ -54,19 +46,21 @@ with st.sidebar:
     st.write(user.email)
     st.button("Log out", on_click=st.logout)
 
-# ───────── SESSION STATE ─────────
+# ────────── SESSION STATE ──────────
 state = st.session_state
-state.setdefault("latlon", None)
-state.setdefault("loc_name", "")
 state.setdefault("feeling", None)
 state.setdefault("issues", set())
+state.setdefault("latlon", None)
+state.setdefault("loc_name", "")
 
-# ───────── HELPERS ─────────
+# ────────── HELPERS ──────────
 def reverse_geocode(lat, lon):
-    url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json"
+    url = (
+        "https://nominatim.openstreetmap.org/reverse"
+        f"?lat={lat}&lon={lon}&format=json"
+    )
     try:
-        j = requests.get(url, timeout=5, headers={"User-Agent": "coolassistant"}).json()
-        a = j.get("address", {})
+        a = requests.get(url, timeout=5, headers={"User-Agent": "coolassistant"}).json().get("address", {})
         city = a.get("city") or a.get("town") or a.get("village") or ""
         region = a.get("state", "")
         country = a.get("country", "")
@@ -74,66 +68,63 @@ def reverse_geocode(lat, lon):
     except Exception:
         return f"{lat:.3f},{lon:.3f}"
 
-# ───────── 1️⃣ MAP ─────────
-st.title("📍 Select Your Exact Location")
-m = folium.Map(location=[36.2, 44.0], zoom_start=6)
-if state.latlon:
-    folium.Marker(state.latlon, tooltip=state.loc_name).add_to(m)
-out = st_folium(m, height=400, use_container_width=True)
+# ────────── 1) FEELING  ──────────
+st.title("🌡️ Weather Feeling Survey")
 
-if out and out.get("last_clicked"):
-    lat = out["last_clicked"]["lat"]
-    lon = out["last_clicked"]["lng"]
-    if state.latlon != (lat, lon):
-        state.latlon  = (lat, lon)
-        state.loc_name = reverse_geocode(lat, lon)
-        st.toast(f"Location chosen: {state.loc_name}", icon="📍")
-
-if state.latlon:
-    st.success(f"Location: {state.loc_name}")
-else:
-    st.info("Click the map to set your location.")
-
-# ───────── 2️⃣ FEELING ─────────
-st.markdown("#### 😊 Your feeling")
+st.markdown("### 1. How do you feel about the weather *right now*?")
 feelings = ["😃 Good", "😐 Neutral", "☹️ Uncomfortable", "😫 Bad"]
 fcols = st.columns(len(feelings))
-for i, lab in enumerate(feelings):
-    sel = state.feeling == lab
-    if fcols[i].button(lab, key=f"feel_{i}", type="primary" if sel else "secondary"):
-        state.feeling = lab
+for i, f in enumerate(feelings):
+    if fcols[i].button(f, key=f"feel_{i}", type="primary" if state.feeling == f else "secondary"):
+        state.feeling = f
 if state.feeling:
-    st.success(f"Feeling: {state.feeling}")
+    st.success(f"Feeling selected: {state.feeling}")
 
-# ───────── 3️⃣ ISSUES ─────────
-st.markdown("#### 🌪️ What's bothering you? (toggle)")
-all_issues = ["🔥 Heat","🌪️ Dust","💨 Wind","🏭 Pollution","💧 Humidity",
-              "☀️ UV","⚡ Storms","🌧️ Rain","❄️ Cold","🌫️ Fog"]
+# ────────── 2) ISSUES  ──────────
+st.markdown("### 2. What’s bothering you? (toggle any)")
+issues_all = [
+    "🔥 Heat", "🌪️ Dust", "💨 Wind", "🏭 Pollution", "💧 Humidity",
+    "☀️ UV", "⚡ Storms", "🌧️ Rain", "❄️ Cold", "🌫️ Fog"
+]
 icol = st.columns(2)
-for i, issue in enumerate(all_issues):
-    sel = issue in state.issues
-    label = ("✅ " if sel else "☐ ") + issue
-    if icol[i%2].button(label, key=f"iss_{i}", type="primary" if sel else "secondary"):
-        state.issues.discard(issue) if sel else state.issues.add(issue)
+for i, issue in enumerate(issues_all):
+    picked = issue in state.issues
+    lab = ("✅ " if picked else "☐ ") + issue
+    if icol[i % 2].button(lab, key=f"issue_{i}", type="primary" if picked else "secondary"):
+        state.issues.discard(issue) if picked else state.issues.add(issue)
 if state.issues:
     st.info("Issues: " + ", ".join(sorted(state.issues)))
 
-# ───────── 4️⃣ SUBMIT ─────────
-ready = state.latlon and state.feeling
-if st.button("🚀 Submit", type="primary", disabled=not ready):
-    rec = {
-        "Timestamp": dt.datetime.now(),
-        "User": user.email,
-        "Location": state.loc_name,
-        "Lat": state.latlon[0],
-        "Lon": state.latlon[1],
-        "Feeling": state.feeling,
-        "Issues": ", ".join(sorted(state.issues)),
-    }
-    save_to_db(rec)
-    st.success("Thanks! Your response was saved.")
-    st.json(rec)
+# ────────── 3) MAP (appears AFTER feeling picked) ──────────
+if state.feeling:
+    st.markdown("### 3. Click the map to pinpoint your location")
+    m = folium.Map(location=[36.2, 44.0], zoom_start=6)
+    if state.latlon:
+        folium.Marker(state.latlon, tooltip=state.loc_name).add_to(m)
+    out = st_folium(m, height=380, use_container_width=True)
+    if out and out.get("last_clicked"):
+        lat, lon = out["last_clicked"]["lat"], out["last_clicked"]["lng"]
+        if state.latlon != (lat, lon):
+            state.latlon = (lat, lon)
+            state.loc_name = reverse_geocode(lat, lon)
+            st.toast(f"Location: {state.loc_name}", icon="📍")
+    if state.latlon:
+        st.success(f"Location set: {state.loc_name}")
 
-# ───────── FOOTER ─────────
+# ────────── 4) SUBMIT ──────────
+ready = state.feeling and state.latlon
+if st.button("🚀 Submit Response", type="primary", disabled=not ready):
+    row = {
+        "ts": dt.datetime.utcnow(),
+        "user": user.email,
+        "location": state.loc_name,
+        "lat": state.latlon[0],
+        "lon": state.latlon[1],
+        "feeling": state.feeling,
+        "issues": ", ".join(sorted(state.issues)),
+    }
+    save_to_db(row)
+    st.success("🎉 Thank you! Your feedback was saved.")
+
 st.markdown("---")
 st.caption("© 2025 Cool Assistant • Kurdistan Region")
