@@ -34,7 +34,7 @@ def handle_authentication() -> None:
 
         # (Optional) logo — swap URL or remove line
         st.markdown(
-            '<img src="https://raw.githubusercontent.com/Hakari-Bibani/photo/refs/heads/main/logo/hasar1.png" width="180">',
+            '<img src="https://github.com/AIforimpact22/coolassistant/blob/main/input/cool_logo.png" width="180">',
             unsafe_allow_html=True,
         )
 
