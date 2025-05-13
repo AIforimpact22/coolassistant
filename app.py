@@ -18,7 +18,6 @@ HOURS_TO_SHOW = 24                             # upcoming 24 h in heat tab
 # ─────── AUTH & SIDEBAR ───────
 handle_authentication()
 user = st.experimental_user
-
 with st.sidebar:
     st.subheader("Account")
     st.write(user.email)
@@ -30,7 +29,6 @@ st.title("🏠 Cool Assistant")
 st.caption(
     "Hourly **heat** & **dust** outlook for the Kurdistan Region, powered by free Open-Meteo APIs."
 )
-
 st.subheader("💡 Daily Tip")
 st.write(
     random.choice(
@@ -61,13 +59,12 @@ def get_air_quality(lat: float, lon: float) -> dict:
     )
     j = requests.get(url, timeout=10).json()
     times = [dt.datetime.fromisoformat(t) for t in j["hourly"]["time"]]
-    data = {
+    return {
         "pm10": j["hourly"]["pm10"],
         "pm2_5": j["hourly"]["pm2_5"],
         "uv": j["hourly"]["uv_index"],
         "time": times,
     }
-    return data
 
 
 @st.cache_data(ttl=600)
@@ -80,8 +77,7 @@ def get_hourly_temps(lat: float, lon: float) -> dict:
     )
     j = requests.get(url, timeout=10).json()
     times = [dt.datetime.fromisoformat(t) for t in j["hourly"]["time"]]
-    temps = j["hourly"]["temperature_2m"]
-    return {"time": times, "temp": temps}
+    return {"time": times, "temp": j["hourly"]["temperature_2m"]}
 
 
 # ───────── UI TABS ─────────
@@ -91,7 +87,12 @@ dust_tab, heat_tab = st.tabs(["🌪️ Dust / Air-Quality", "🌞 Temperature"])
 # ─────── DUST / AIR-QUALITY TAB ───────
 with dust_tab:
     st.header("🌪️ Dust & Air-Quality – next 4 days (daily maxima)")
-    st_folium(build_map(CENTER_LAT, CENTER_LON), use_container_width=True, height=420)
+    st_folium(                     # 🔑 give this map a unique key
+        build_map(CENTER_LAT, CENTER_LON),
+        use_container_width=True,
+        height=420,
+        key="dust_map",
+    )
 
     aq = get_air_quality(CENTER_LAT, CENTER_LON)
 
@@ -124,26 +125,33 @@ with dust_tab:
         st.metric(day.strftime("%a %d %b"), f"{val:.0f} µg/m³", risk)
 
     today = dt.date.today()
-    uv_val = uv_daily.get(today)
-    if uv_val is not None:
+    if (uv_val := uv_daily.get(today)) is not None:
         st.info(f"**Today’s peak UV index:** {uv_val:.1f}")
 
 
 # ─────── TEMPERATURE TAB ───────
 with heat_tab:
     st.header("🌞 Upcoming 24-hour Temperature")
-    st_folium(build_map(CENTER_LAT, CENTER_LON), use_container_width=True, height=420)
+    st_folium(                     # 🔑 *different* key for the second map
+        build_map(CENTER_LAT, CENTER_LON),
+        use_container_width=True,
+        height=420,
+        key="temp_map",
+    )
 
     data = get_hourly_temps(CENTER_LAT, CENTER_LON)
     now = dt.datetime.now().replace(minute=0, second=0, microsecond=0)
-    next_24 = [(t, temp) for t, temp in zip(data["time"], data["temp"]) if now <= t < now + dt.timedelta(hours=HOURS_TO_SHOW)]
+    next_24 = [
+        (t, temp)
+        for t, temp in zip(data["time"], data["temp"])
+        if now <= t < now + dt.timedelta(hours=HOURS_TO_SHOW)
+    ]
 
-    # Simple textual timeline (replace with chart later if you wish)
     st.subheader("Hourly outlook (°C)")
     cols = st.columns(4)
     for i, (t, temp) in enumerate(next_24):
         with cols[i % 4]:
-            st.write(f"{t.strftime('%H:%M')}: **{temp:.1f}°C**")
+            st.write(f"{t.strftime('%H:%M')}: **{temp:.1f} °C**")
 
 
 # ─────── FOOTER ───────
