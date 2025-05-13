@@ -78,7 +78,7 @@ with st.sidebar:
         if st.button(label, type="primary" if st.session_state.page == key else "secondary"):
             st.session_state.page = key
 
-    nav("📝 ڕاپرسی", "survey")
+    nav(" ڕاپرسی 📝", "survey")
     nav("🗺️ نەخشەی هەستەکان", "map")
     nav("ℹ️ دەربارە", "about")
 
