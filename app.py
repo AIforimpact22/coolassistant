@@ -75,18 +75,22 @@ def get_hourly_temps(lat: float, lon: float) -> dict:
     times = [dt.datetime.fromisoformat(t) for t in j["hourly"]["time"]]
     return {"time": times, "temp": j["hourly"]["temperature_2m"]}
 
-# ───────── Bucket rules & helper for charts ─────────
+# ───────── EU-AQI bucket rules ─────────
 PM10_RULES = [
-    (0, 100, "Low", "green"),
-    (100, 200, "Moderate", "gold"),
-    (200, 300, "High", "orange"),
-    (300, 1e9, "Very High", "red"),
+    (0, 20,   "Good",            "green"),
+    (20, 40,  "Fair",            "limegreen"),
+    (40, 50,  "Moderate",        "yellow"),
+    (50, 100, "Poor",            "orange"),
+    (100, 150,"Very poor",       "red"),
+    (150, 1200,"Extremely poor", "darkred"),
 ]
 PM25_RULES = [
-    (0, 55, "L", "green"),
-    (55, 90, "M", "gold"),
-    (90, 150, "H", "orange"),
-    (150, 1e9, "VH", "red"),
+    (0, 10,   "Good",            "green"),
+    (10, 20,  "Fair",            "limegreen"),
+    (20, 25,  "Moderate",        "yellow"),
+    (25, 50,  "Poor",            "orange"),
+    (50, 75,  "Very poor",       "red"),
+    (75, 800, "Extremely poor",  "darkred"),
 ]
 
 def classify(v, rules):
@@ -107,7 +111,7 @@ def bar_chart(df, title, vmax, rules):
             color=alt.Color("colour:N", scale=None, legend=None),
             tooltip=["day:N", "value:Q", "bucket:N"],
         )
-        .properties(width=360)
+        .properties(width=380)
     )
 
 # ───────── UI TABS ─────────
@@ -128,7 +132,7 @@ with dust_tab:
         pm25_daily[d] = max(v25, pm25_daily.get(d, -1))
         uv_daily[d] = max(uv, uv_daily.get(d, -1))
 
-    # Build DataFrames for charts
+    # DataFrames for charts
     pm10_df = pd.DataFrame(
         {"day": [d.strftime("%a %d %b") for d in list(pm10_daily)[:4]],
          "value": list(pm10_daily.values())[:4]}
@@ -139,10 +143,10 @@ with dust_tab:
     )
 
     st.subheader("PM10 (µg/m³)")
-    st.altair_chart(bar_chart(pm10_df, "PM10", 350, PM10_RULES), use_container_width=True)
+    st.altair_chart(bar_chart(pm10_df, "PM10", 1200, PM10_RULES), use_container_width=True)
 
     st.subheader("PM2.5 (µg/m³)")
-    st.altair_chart(bar_chart(pm25_df, "PM2.5", 200, PM25_RULES), use_container_width=True)
+    st.altair_chart(bar_chart(pm25_df, "PM2.5", 800, PM25_RULES), use_container_width=True)
 
     today = dt.date.today()
     if (uv_val := uv_daily.get(today)) is not None:
