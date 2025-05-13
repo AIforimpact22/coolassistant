@@ -9,7 +9,7 @@ from auth import handle_authentication
 
 # ────────────────────────────── CONFIG ──────────────────────────────
 st.set_page_config(page_title="Cool Assistant", layout="wide")
-API_KEY = os.getenv("OPENWEATHER_API_KEY")            # 5-day / 3-hour forecast
+API_KEY = os.getenv("b06517965860a77b4a73885dad3915d1")            # 5-day / 3-hour forecast
 LOCATION = "Erbil,IQ"                                 # OpenWeather “city,country”
 
 
