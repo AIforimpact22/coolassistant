@@ -1,148 +1,145 @@
-# app.py  •  Cool Assistant – Heat-Wave & Dust-Storm Helper
+# app.py  ·  Cool Assistant – Heat-Wave & Dust-Storm Helper
 import os
 import datetime as dt
 import random
 import requests
 import streamlit as st
+import folium
+from streamlit_folium import st_folium
 from auth import handle_authentication
 
 
-# ────────────────────────────── CONFIG ──────────────────────────────
+# ───────────────────────── CONFIG ─────────────────────────
 st.set_page_config(page_title="Cool Assistant", layout="wide")
-API_KEY = os.getenv("b06517965860a77b4a73885dad3915d1")            # 5-day / 3-hour forecast
-LOCATION = "Erbil,IQ"                                 # OpenWeather “city,country”
 
+# ◼️ OpenWeather key – keep it secret in prod!
+OWM_API_KEY = os.getenv("OWM_API_KEY") or "b06517965860a77b4a73885dad3915d1"
+LOCATION_NAME = "Erbil,IQ"
+CENTER_LAT, CENTER_LON = 36.206, 44.009       # Kurdistan centre
 
-# ─────────────────────────── AUTHENTICATION ─────────────────────────
+# ─────────────────────── AUTH & SIDEBAR ───────────────────
 handle_authentication()
 user = st.experimental_user
 
-
-# ────────────────────────── SIDEBAR (ACCOUNT) ───────────────────────
 with st.sidebar:
     st.subheader("Account")
     st.write(user.email)
     st.button("Log out", on_click=st.logout, use_container_width=True)
 
-
-# ─────────────────────────── HEADER & MOTTO ─────────────────────────
+# ───────────────────────── HEADER ─────────────────────────
 st.title("🏠 Cool Assistant")
 st.caption(
-    "Your companion for mitigating **heat waves** and **dust storms** "
-    "across the Kurdistan Region."
+    "Your assistant for **mitigating heat waves and dust storms** across the Kurdistan Region."
 )
 
-
-# ───────────────────────────── DAILY TIP ────────────────────────────
+# ─────────────────────── DAILY TIP ────────────────────────
 st.subheader("💡 Daily Tip")
 st.write(
     random.choice(
         [
-            "Close windows during midday heat; ventilate late night / early morning.",
-            "Use damp cotton curtains to pre-filter dust and cool incoming air.",
+            "Close windows during the midday heat; ventilate late-night / early-morning.",
+            "Hang damp cotton curtains—they pre-filter dust and cool incoming air.",
             "Add weather-stripping to doors to keep hot, dusty air outside.",
         ]
     )
 )
 
-
-# ─────────────────────────────── TABS ───────────────────────────────
+# ────────────────────────── TABS ──────────────────────────
 dust_tab, heat_tab = st.tabs(["🌪️ Dust-Storm Forecast", "🌞 Heat-Wave Forecast"])
 
 
-# ── 1)  DUST-STORM FORECAST TAB ─────────────────────────────────────
+# ── HELPER: build a Folium map with an OpenWeather tile ──
+def build_folium(layer_code: str, opacity: float = 0.6) -> folium.Map:
+    """
+    layer_code examples (Weather Maps 1.0):
+        - 'wind_new'  (wind speed & direction)
+        - 'temp_new'  (air temperature)
+    """
+    m = folium.Map(location=[CENTER_LAT, CENTER_LON], zoom_start=6)
+    folium.TileLayer(
+        tiles=f"https://tile.openweathermap.org/map/{layer_code}/{{z}}/{{x}}/{{y}}.png?appid={OWM_API_KEY}",
+        attr="OpenWeatherMap",
+        name=layer_code,
+        overlay=True,
+        control=True,
+        opacity=opacity,
+    ).add_to(m)
+
+    folium.LayerControl().add_to(m)
+    return m
+
+
+# ─────────────────── DUST-STORM TAB ───────────────────────
 with dust_tab:
-    st.header("🌪️ Dust-Storm Risk – Next 5 Days")
+    st.header("🌪️ Dust-Storm Risk – Next 4 Days")
 
-    def fetch_dust_data(city: str):
-        """
-        Placeholder: Replace with a real dust / PM10 / PM2.5 forecast API
-        (e.g. IQAir, BreezoMeter, Copernicus CAMS).
-        """
-        dummy = []
-        base = dt.date.today()
-        for i in range(5):
-            dummy.append(
-                {
-                    "date": base + dt.timedelta(days=i),
-                    "pm10": random.randint(100, 400),      # µg/m³
-                    "risk": random.choice(["Low", "Moderate", "High"]),
-                }
-            )
-        return dummy
+    # A. Dust-proxy map (wind layer)
+    st.markdown("##### Wind layer (higher winds ⇒ higher blowing-dust risk)")
+    st_folium(build_folium("wind_new"), use_container_width=True, height=500)
 
-    dust = fetch_dust_data(LOCATION)
-
-    # Display
-    for day in dust:
-        color = {"Low": "🟢", "Moderate": "🟠", "High": "🔴"}[day["risk"]]
-        st.metric(
-            label=day["date"].strftime("%A %d %b"),
-            value=f"{color} {day['risk']}",
-            delta=f"PM10 ≈ {day['pm10']} µg/m³",
+    # B. PM10 / AQI forecast for Erbil (OpenWeather Air-Pollution API)
+    def fetch_pm10_daily_max(lat: float, lon: float):
+        url = (
+            f"https://api.openweathermap.org/data/2.5/air_pollution/forecast?"
+            f"lat={lat}&lon={lon}&appid={OWM_API_KEY}"
         )
+        data = requests.get(url, timeout=8).json()
+        daily_max = {}
+        for item in data["list"]:
+            day = dt.datetime.utcfromtimestamp(item["dt"]).date()
+            pm10 = item["components"]["pm10"]
+            daily_max[day] = max(pm10, daily_max.get(day, -1))
+        return daily_max
 
-    st.info(
-        "Data source: replace `fetch_dust_data()` with a live API such as "
-        "**IQAir Forecast** or **Copernicus CAMS Dust ‘DIFS’**."
-    )
+    try:
+        pm10 = fetch_pm10_daily_max(CENTER_LAT, CENTER_LON)
+        for day, value in list(pm10.items())[:4]:  # only next 4 days
+            risk = (
+                "🔴 Very High" if value >= 300
+                else "🟠 High" if value >= 200
+                else "🟡 Moderate" if value >= 100
+                else "🟢 Low"
+            )
+            st.metric(day.strftime("%A %d %b"), f"{value:.0f} µg/m³", risk)
+    except Exception:
+        st.warning("Could not load PM10 forecast – check API quota.")
 
 
-# ── 2)  HEAT-WAVE FORECAST TAB ──────────────────────────────────────
+# ─────────────────── HEAT-WAVE TAB ────────────────────────
 with heat_tab:
     st.header("🌞 Heat-Wave Outlook – Next 5 Days")
 
-    def fetch_heat_data(city: str, api_key: str):
-        """
-        Pull OpenWeatherMap 5-day / 3-hour forecast and extract daily highs.
-        """
-        if not api_key:
-            return None
+    # A. Temperature map layer
+    st.markdown("##### Temperature layer (°C)")
+    st_folium(build_folium("temp_new"), use_container_width=True, height=500)
 
+    # B. Daily-high extraction
+    def fetch_daily_highs(city: str):
         url = (
             "https://api.openweathermap.org/data/2.5/forecast?"
-            f"q={city}&appid={api_key}&units=metric"
+            f"q={city}&appid={OWM_API_KEY}&units=metric"
         )
         raw = requests.get(url, timeout=8).json()
+        highs = {}
+        for i in raw["list"]:
+            day = dt.datetime.fromtimestamp(i["dt"]).date()
+            highs[day] = max(highs.get(day, -273), i["main"]["temp_max"])
+        return highs
 
-        # Aggregate max temp per calendar day
-        daily_highs = {}
-        for item in raw["list"]:
-            day = dt.datetime.fromtimestamp(item["dt"]).date()
-            temp = item["main"]["temp_max"]
-            daily_highs[day] = max(temp, daily_highs.get(day, -999))
-
-        today = dt.date.today()
-        outlook = [
-            {"date": today + dt.timedelta(days=i), "max": daily_highs.get(today + dt.timedelta(days=i))}
-            for i in range(5)
-        ]
-        return outlook
-
-    if not API_KEY:
-        st.warning("Set OPENWEATHER_API_KEY in your environment to view heat data.")
-    else:
-        forecast = fetch_heat_data(LOCATION, API_KEY)
+    try:
+        highs = fetch_daily_highs(LOCATION_NAME)
         thresholds = {"Heat-Wave": 43, "Warning": 38}
-
-        for day in forecast:
+        for day, tmax in list(highs.items())[:5]:
             status = (
-                "🔥 Heat-Wave" if day["max"] >= thresholds["Heat-Wave"]
-                else "⚠️ Hot" if day["max"] >= thresholds["Warning"]
+                "🔥 Heat-Wave" if tmax >= thresholds["Heat-Wave"]
+                else "⚠️ Hot" if tmax >= thresholds["Warning"]
                 else "🙂 Warm"
             )
-            st.metric(
-                label=day["date"].strftime("%A %d %b"),
-                value=f"{day['max']:.1f} °C",
-                delta=status,
-            )
-
-        st.success(
-            f"Thresholds: **Heat-Wave ≥ {thresholds['Heat-Wave']} °C**, "
-            f"Warning ≥ {thresholds['Warning']} °C."
-        )
+            st.metric(day.strftime("%A %d %b"), f"{tmax:.1f} °C", status)
+    except Exception:
+        st.warning("Could not load 5-day forecast – check API key or quota.")
 
 
-# ───────────────────────── FOOTER (OPTIONAL) ────────────────────────
+# ───────────────────────── FOOTER ─────────────────────────
 st.markdown("---")
 st.caption("© 2025 Cool Assistant • Kurdistan Region")
