@@ -74,9 +74,9 @@ with st.sidebar:
         if st.button(txt, type="primary" if st.session_state.page == key else "secondary"):
             st.session_state.page = key
 
-    nav("📝 ڕاپرسی", "survey")
-    nav("🗺️ نەخشەی هەستەکان", "map")
-    nav("ℹ️ دەربارە", "about")
+    nav(" ڕاپرسی📝", "survey")
+    nav(" نەخشەی هەستەکان 🗺️", "map")
+    nav(" دەربارەی ℹ️", "about")
 
     st.markdown("---")
     st.write("👤", user.email)
@@ -178,10 +178,10 @@ elif sv.page == "map":
     else:
         # ڕەنگەکان و هەستەکان
         colormap = {
-            "😃 باشم": "green",
-            "😐 ئاسایی": "blue",
-            "☹️ خۆشم نیە": "orange",
-            "😫 زۆر کێشم": "red",
+            "😃 باش": "green",
+            "😐 زۆر باش": "blue",
+            "☹️ خراپ": "orange",
+            "😫 زۆر خراپ": "red",
         }
         mp = folium.Map(location=[36.2, 44.0], zoom_start=6)
         cluster = MarkerCluster().add_to(mp)
@@ -203,10 +203,10 @@ elif sv.page == "map":
              background: rgba(255,255,255,0.85); padding: 6px 10px;
              border-radius:8px; font-size:14px;">
           <b>ڕەنگەکان</b><br>
-          <i style='background:green;width:12px;height:12px;display:inline-block;'></i> 😃 باشم<br>
-          <i style='background:blue;width:12px;height:12px;display:inline-block;'></i> 😐 ئاسایی<br>
-          <i style='background:orange;width:12px;height:12px;display:inline-block;'></i> ☹️ خۆشم نیە<br>
-          <i style='background:red;width:12px;height:12px;display:inline-block;'></i> 😫 زۆر کێشم
+          <i style='background:green;width:12px;height:12px;display:inline-block;'></i> 😃 باش<br>
+          <i style='background:blue;width:12px;height:12px;display:inline-block;'></i> 😐 زۆر باش<br>
+          <i style='background:orange;width:12px;height:12px;display:inline-block;'></i> ☹️ خراپ<br>
+          <i style='background:red;width:12px;height:12px;display:inline-block;'></i> 😫 زۆر خراپ
         </div>
         """
         mp.get_root().html.add_child(folium.Element(legend_html))
@@ -216,7 +216,7 @@ elif sv.page == "map":
 #                                   ٣. دەربارە
 # =============================================================================
 else:
-    st.title("ℹ️ دەربارەی کۆول ئاسیستەنت")
+    st.title(" دەربارەی کۆول ئاسیستەنت ℹ️")
     st.markdown("""
 کۆول ئاسیستەنت  داتای هەست و کێشەی بەکارهێنەران کۆدەکاتەوە بۆ بەرزکردنەوەی ئاگاداری
 لەبارەی کاریگەری هەوا و چۆنیەتی چارەسەرکردنی کێشەکان.
