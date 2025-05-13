@@ -1,12 +1,13 @@
-# app.py · Cool Assistant — Accurate Nominatim Location + Button Survey
+# app.py · Cool Assistant — Map-Click Accurate Location Survey
 import datetime as dt
 import requests
 import streamlit as st
+import folium
+from streamlit_folium import st_folium
 from auth import handle_authentication
 
 # ───────── CONFIG ─────────
 st.set_page_config(page_title="Cool Assistant Survey", layout="centered")
-NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 
 # ───────── AUTH ─────────
 handle_authentication()
@@ -14,7 +15,10 @@ user = st.experimental_user
 
 # ───────── SIDEBAR ─────────
 with st.sidebar:
-    st.image("https://github.com/AIforimpact22/coolassistant/blob/main/input/cool_logo.png?raw=true", width=180)
+    st.image(
+        "https://github.com/AIforimpact22/coolassistant/blob/main/input/cool_logo.png?raw=true",
+        width=180,
+    )
     st.markdown("---")
     st.subheader("Logged in as")
     st.write(user.email)
@@ -22,85 +26,90 @@ with st.sidebar:
 
 # ───────── SESSION STATE ─────────
 state = st.session_state
-state.setdefault("loc_query", "")
-state.setdefault("loc_choices", [])   # list of dicts from Nominatim
-state.setdefault("loc_choice_idx", -1)
-state.setdefault("feeling", None)
-state.setdefault("issues", set())
+state.setdefault("latlon", None)       # (lat, lon)
+state.setdefault("loc_name", "")       # str
+state.setdefault("feeling", None)      # str
+state.setdefault("issues", set())      # set[str]
 
 # ───────── HELPERS ─────────
-def nominatim_search(query: str):
-    """Return list of place dicts [{'display_name', 'lat','lon'}..]."""
-    params = {"q": query, "format": "json", "limit": 5, "addressdetails": 0}
+def reverse_geocode(lat: float, lon: float) -> str:
+    url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json"
     try:
-        resp = requests.get(NOMINATIM_URL, params=params, timeout=5,
-                            headers={"User-Agent": "coolassistant"})
-        return resp.json()
+        data = requests.get(url, timeout=5, headers={"User-Agent": "coolassistant"}).json()
+        addr = data.get("address", {})
+        city = addr.get("city") or addr.get("town") or addr.get("village") or ""
+        region = addr.get("state", "")
+        country = addr.get("country", "")
+        place = ", ".join(p for p in (city, region, country) if p)
+        return place or f"{lat:.3f}, {lon:.3f}"
     except Exception:
-        return []
+        return f"{lat:.3f}, {lon:.3f}"
 
-# ───────── UI ─────────
-st.title("🌡️ Real-Time Weather Feeling Survey")
+# ───────── 1️⃣ MAP SELECTION ─────────
+st.title("📍 Select Your Exact Location")
 
-# 1️⃣  Location search
-st.markdown("#### 1. Pick your exact location")
-state.loc_query = st.text_input("Start typing…", value=state.loc_query)
-if len(state.loc_query) >= 3:
-    state.loc_choices = nominatim_search(state.loc_query)
+# Build map centred roughly on Kurdistan; zoom so user can scroll/pan
+m = folium.Map(location=[36.2, 44.0], zoom_start=6, height=400)
+if state.latlon:
+    folium.Marker(state.latlon, tooltip=state.loc_name or "Chosen location").add_to(m)
+
+out = st_folium(m, height=400, use_container_width=True)
+
+# Handle click
+if out and out.get("last_clicked"):
+    lat = out["last_clicked"]["lat"]
+    lon = out["last_clicked"]["lng"]
+    # Only update if user clicked a new spot
+    if state.latlon != (lat, lon):
+        state.latlon = (lat, lon)
+        state.loc_name = reverse_geocode(lat, lon)
+        st.toast(f"Location set: {state.loc_name}", icon="📍")
+
+if state.latlon:
+    st.success(f"Location: {state.loc_name}  (lat {state.latlon[0]:.4f}, lon {state.latlon[1]:.4f})")
 else:
-    state.loc_choices = []
+    st.info("Click on the map to set your exact location.")
 
-# list choices as buttons
-for i, place in enumerate(state.loc_choices):
-    label = place["display_name"]
-    if st.button(label, key=f"loc_{i}", type="primary" if i == state.loc_choice_idx else "secondary"):
-        state.loc_choice_idx = i
-
-if state.loc_choice_idx >= 0:
-    sel = state.loc_choices[state.loc_choice_idx]
-    st.success(f"Chosen: **{sel['display_name']}**  "
-               f"(lat {float(sel['lat']):.4f}, lon {float(sel['lon']):.4f})")
-
-# 2️⃣  Feeling
-st.markdown("#### 2. Your overall feeling")
+# ───────── 2️⃣ FEELING BUTTONS ─────────
+st.markdown("#### 😊 How do you feel about the weather right now?")
 feels = ["😃 Good", "😐 Neutral", "☹️ Uncomfortable", "😫 Bad"]
-fcols = st.columns(len(feels))
-for i, lab in enumerate(feels):
-    if fcols[i].button(lab, key=f"feel_{i}", type="primary" if state.feeling == lab else "secondary"):
-        state.feeling = lab
+cols = st.columns(len(feels))
+for i, label in enumerate(feels):
+    sel = state.feeling == label
+    if cols[i].button(label, key=f"feel_{i}", type="primary" if sel else "secondary"):
+        state.feeling = label
 if state.feeling:
-    st.success(f"Feeling: {state.feeling}")
+    st.success(f"Selected feeling: {state.feeling}")
 
-# 3️⃣  Issues
-st.markdown("#### 3. What’s bothering you? (toggle)")
+# ───────── 3️⃣ ISSUES TOGGLE BUTTONS ─────────
+st.markdown("#### 🌪️ What's bothering you now? (toggle)")
 issues_all = [
-    "🔥 Heat", "🌪️ Dust", "💨 Wind", "🏭 Pollution", "💧 Humidity",
-    "☀️ UV", "⚡ Storms", "🌧️ Rain", "❄️ Cold", "🌫️ Fog"
+    "🔥 High Temperature", "🌪️ Dust", "💨 Wind", "🏭 Air Pollution",
+    "💧 Humidity", "☀️ UV", "⚡️ Thunderstorms", "🌧️ Rain", "❄️ Cold", "🌫️ Fog"
 ]
 icol = st.columns(2)
 for i, issue in enumerate(issues_all):
     picked = issue in state.issues
-    label = ("✅ " if picked else "☐ ") + issue
+    label  = ("✅ " if picked else "☐ ") + issue
     if icol[i % 2].button(label, key=f"issue_{i}", type="primary" if picked else "secondary"):
         state.issues.discard(issue) if picked else state.issues.add(issue)
 if state.issues:
     st.info("Issues: " + ", ".join(sorted(state.issues)))
 
-# 4️⃣  Submit
-ready = state.loc_choice_idx >= 0 and state.feeling
-if st.button("🚀 Submit", type="primary", disabled=not ready):
-    place = state.loc_choices[state.loc_choice_idx]
+# ───────── 4️⃣ SUBMIT ─────────
+ready = state.latlon and state.feeling
+if st.button("🚀 Submit Response", type="primary", disabled=not ready):
     payload = {
         "Timestamp": dt.datetime.now().isoformat(),
         "User": user.email,
-        "Location": place["display_name"],
-        "Lat": place["lat"],
-        "Lon": place["lon"],
+        "Location": state.loc_name,
+        "Lat": state.latlon[0],
+        "Lon": state.latlon[1],
         "Feeling": state.feeling,
         "Issues": ", ".join(sorted(state.issues)),
     }
-    # TODO: store payload (database / sheet / etc.)
-    st.success("Thank you! Your feedback has been recorded.")
+    # TODO: store payload (DB / spreadsheet / etc.)
+    st.success("Thank you! Your response was recorded.")
     st.json(payload)
 
 st.markdown("---")
