@@ -1,12 +1,14 @@
 import streamlit as st
 
+RAW_LOGO_URL = (
+    "https://raw.githubusercontent.com/AIforimpact22/coolassistant/main/input/cool_logo.png"
+)
+
 
 def handle_authentication() -> None:
     """Show a custom Google-sign-in page until the visitor is authenticated."""
-
-    # ── 1)  If the visitor is NOT logged in ──────────────────────────────
     if not st.experimental_user.is_logged_in:
-        # Minimal CSS – hide Streamlit chrome & center login box
+        # ---------- minimal CSS ----------
         st.markdown(
             """
             <style>
@@ -29,14 +31,11 @@ def handle_authentication() -> None:
             unsafe_allow_html=True,
         )
 
-        # Branded login UI
+        # ---------- branded login UI ----------
         st.markdown('<div class="login-container">', unsafe_allow_html=True)
 
-        # (Optional) logo — swap URL or remove line
-        st.markdown(
-            '<img src="https://github.com/AIforimpact22/coolassistant/blob/main/input/cool_logo.png" width="180">',
-            unsafe_allow_html=True,
-        )
+        # Display logo (use raw URL so the image loads correctly)
+        st.image(RAW_LOGO_URL, width=180)
 
         st.markdown(
             """
@@ -50,10 +49,6 @@ def handle_authentication() -> None:
             unsafe_allow_html=True,
         )
 
-        # Actual OAuth trigger
         st.button("Log in with Google", on_click=st.login, use_container_width=True)
-
         st.markdown("</div>", unsafe_allow_html=True)
-        st.stop()  # Halt execution until logged in
-
-    # ── 2)  Authenticated: return silently to caller (app.py) ────────────
+        st.stop()  # halt execution until logged in
