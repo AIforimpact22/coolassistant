@@ -42,7 +42,7 @@ st.markdown("---")
 st.markdown("""
 **Questions or feedback?**
 
-📧 **[Contact us](mailto:info@coolassistant.org)**  
+📧 **[Contact us](mailto:hawkar.geoscience@gmail.com)**  
 """)
 
 st.caption("© 2025 Cool Assistant • Kurdistan Region")
