@@ -4,3 +4,5 @@ pandas>=2.2.0
 plotly
 authlib>=1.3.0
 streamlit-cookies
+streamlit-folium>=0.18.0
+folium>=0.15.1 
