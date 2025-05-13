@@ -10,7 +10,7 @@ from streamlit_folium import st_folium
 from auth import handle_authentication
 
 # ───────── LOCATION & CONFIG ─────────
-LATITUDE  = 36.1912
+LATITUDE  = 33.1912
 LONGITUDE = 44.0094
 TIMEZONE  = "auto"
 HOURS_TO_SHOW = 24
