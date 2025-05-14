@@ -73,10 +73,10 @@ st.sidebar.image(
     width=180,
 )
 
-PAGES = [("📝 Survey",  "survey"),
-         ("🗺️ Map",     "map"),
-         ("📊 My history","history"),   # NEW menu item
-         ("ℹ️ About",   "about")]
+PAGES = [("📝 Survey",  "هەستەکەم"),
+         ("🗺️ Map",     "نەخشەکەم"),
+         ("📊 My history","مێژووم"),   # NEW menu item
+         ("ℹ️ About",   "دەربارە")]
 
 if "page" not in st.session_state:
     st.session_state.page = "survey"
