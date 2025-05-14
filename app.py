@@ -68,7 +68,7 @@ def reverse_geocode(lat,lon):
 if sv.page=="survey":
     st.title("🌡️ ڕاپرسی هەسەت بە هەوا")
     # هەست بە ئیمۆجی
-    st.markdown("#### ١. هەستت لەگەڵ هەوای ئێستا؟")
+    st.markdown("#### ١. هەستت لەگەڵ کەشوهەوای ئێستا چۆنە؟؟")
     emojis=["😃","😐","☹️","😫"]
     cols=st.columns(4)
     for i,e in enumerate(emojis):
