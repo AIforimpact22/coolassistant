@@ -56,7 +56,7 @@ with st.sidebar:
 if sv.page == "survey":
     st.title("🌡️ ڕاپرسی هەست بە هەوا")
 
-    st.markdown("#### ١. هەستت بەرامبەر بە کەشوهەوا چۆنە؟ (ئیمۆجی کلیک بکە)")
+    st.markdown("#### ١. هەستت؟ (ئیمۆجی کلیک بکە)")
     emojis = ["😃", "😐", "☹️", "😫"]; cols = st.columns(4)
     for i, e in enumerate(emojis):
         if cols[i].button(e, key=f"emo{i}", type="primary" if sv.feeling == e else "secondary"):
@@ -99,4 +99,26 @@ elif sv.page == "map":
     if not rows:
         st.info("هێشتا هیچ دێتەیەک نییە.")
     else:
-        weight = {"
+        weight = {"😃": 1, "😐": 0.66, "☹️": 0.33, "😫": 0}
+        heat = [[lat, lon, weight.get(feel.split()[0], 0.5)] for lat, lon, feel in rows]
+
+        # لێژەند لە سەر
+        lg_cols = st.columns(4)
+        for c, (col, emo) in zip(lg_cols, [("green","😃"),("blue","😐"),("orange","☹️"),("red","😫")]):
+            c.markdown(color_card(col, emo), unsafe_allow_html=True)
+
+        # نقشه
+        mp = folium.Map(location=[36.2, 44.0], zoom_start=6)
+        HeatMap(heat,
+                gradient={"0":"red","0.33":"orange","0.66":"blue","1":"green"},
+                min_opacity=0.25,max_opacity=0.9,radius=35,blur=20).add_to(mp)
+        st_folium(mp, height=550, use_container_width=True)
+
+# ═════════════ ٣. دەربارە ═════════════
+else:
+    st.title("ℹ️ دەربارەی کۆول ئاسیستەنت")
+    st.markdown("پروجەیێک بۆ کۆکردنەوەی هەستەکانی خەڵک بە کەشوهەوا بۆ پلانسازی و پاراستنی تەندروستی.")
+    st.image("https://raw.githubusercontent.com/AIforimpact22/coolassistant/main/input/cool_logo.png", width=230)
+    st.subheader("پەیوەندی"); st.markdown("[hawkar.geoscience@gmail.com](mailto:hawkar.geoscience@gmail.com)")
+
+st.markdown("---"); st.caption("© 2025 Cool Assistant • هەرێمی کوردستان")
