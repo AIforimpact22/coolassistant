@@ -1,17 +1,15 @@
-# app.py – Cool Assistant • nav + DB + hourly clean + share-links
-import datetime as dt
-import urllib.parse
-import psycopg2, streamlit as st
+# app.py – Cool Assistant • map-first home, DB, hourly clean, share links
+import datetime as dt, urllib.parse, psycopg2, streamlit as st
 from auth import handle_authentication
 
-import survey, map, contribution, about
+import map, survey, contribution, about
 
 PG_URL = ("postgresql://cool_owner:npg_jpi5LdZUbvw1@"
           "ep-frosty-tooth-a283lla4-pooler.eu-central-1.aws.neon.tech/"
           "cool?sslmode=require")
-TABLE = "survey_responses"
-APP_URL = "https://coolassistant.streamlit.app"      # public URL to share
-# ------------------------------------------------------------------ DB
+TABLE   = "survey_responses"
+APP_URL = "https://coolassistant.streamlit.app"   # public link to share
+# ───────────────── DB helpers ─────────────────
 def ensure_table():
     with psycopg2.connect(PG_URL) as con, con.cursor() as cur:
         cur.execute(f"""CREATE TABLE IF NOT EXISTS {TABLE}(
@@ -29,8 +27,7 @@ def save_row(row: dict):
             f"""INSERT INTO {TABLE}
                  (ts,user_email,lat,lon,feeling,issues)
                VALUES (%(ts)s,%(user)s,%(lat)s,%(lon)s,
-                       %(feeling)s,%(issues)s);""",
-            row)
+                       %(feeling)s,%(issues)s);""", row)
     st.toast("✅ تۆمار کرا")
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -50,52 +47,52 @@ WITH dup AS (
 DELETE FROM {TABLE} WHERE ctid IN (SELECT ctid FROM dup);""")
         con.commit()
 auto_clean()
-# ------------------------------------------------------------------ UI shell
+# ───────────────── Streamlit shell ─────────────────
 st.set_page_config("Cool Assistant", layout="centered")
 handle_authentication()
 user = st.experimental_user
-# ---------------- Sidebar ---------------------------------------------------
+# ───────────────── Sidebar ─────────────────
 st.sidebar.image(
     "https://raw.githubusercontent.com/AIforimpact22/coolassistant/main/input/cool_logo.png",
     width=180,
 )
 
-PAGES = [("📝 هەستەکەم", "survey"),
-         ("🗺️ نەخشەکەم", "map"),
-         ("📊 مێژووم",   "history"),
-         ("ℹ️ دەربارە",  "about")]
+# Map first, then survey, history, about
+PAGES = [("🗺️ نەخشەکەم",  "map"),
+         ("📝 هەستەکەم",  "survey"),
+         ("📊 مێژووم",    "history"),
+         ("ℹ️ دەربارە",   "about")]
 
 if "page" not in st.session_state:
-    st.session_state.page = "survey"
+    st.session_state.page = "map"          # default is map now
 
-for lbl, key in PAGES:
-    if st.sidebar.button(lbl,
-          type="primary" if st.session_state.page == key else "secondary"):
+for label, key in PAGES:
+    if st.sidebar.button(label,
+                         type="primary" if st.session_state.page == key else "secondary"):
         st.session_state.page = key
 
 st.sidebar.markdown("---")
 st.sidebar.write("👤", user.email)
 st.sidebar.button("دەرچوون", on_click=st.logout)
 
-# ---------- share-links ----------
+# Share section
 st.sidebar.markdown("---")
 st.sidebar.subheader("📤 هاوبەشکردن")
 
-mailto_body = urllib.parse.quote(
-    f"سڵاو!\n\nسەیری ئەم بەستەرە بکە، کۆول ئاسیستەنت:\n{APP_URL}\n")
-mailto_link = f"mailto:?subject=Cool%20Assistant&body={mailto_body}"
-wa_link = f"https://wa.me/?text={urllib.parse.quote(APP_URL)}"
+mailto = ("mailto:?subject=Cool%20Assistant&body=" +
+          urllib.parse.quote(f"سڵاو!\n\nکۆول ئاسیستەنت سەیری بکە:\n{APP_URL}"))
+wa     = "https://wa.me/?text=" + urllib.parse.quote(APP_URL)
 
-st.sidebar.markdown(f"[📧 بە ئیمەیڵ]({mailto_link})")
-st.sidebar.markdown(f"[💬 واتسئاپ]({wa_link})")
+st.sidebar.markdown(f"[📧 بە ئیمەیڵ]({mailto})")
+st.sidebar.markdown(f"[💬 واتسئاپ]({wa})")
 st.sidebar.code(APP_URL, language="bash")
 
-# ---------------- router ----------------------------------------------------
+# ───────────────── Router ─────────────────
 page = st.session_state.page
-if page == "survey":
-    survey.show(save_row, user.email)
-elif page == "map":
+if page == "map":
     map.show_heatmap()
+elif page == "survey":
+    survey.show(save_row, user.email)
 elif page == "history":
     contribution.show_history(user.email)
 else:
