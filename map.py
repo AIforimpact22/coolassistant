@@ -1,4 +1,4 @@
-# map.py – heat-map + big-view toggle + survey redirect + total counter
+# map.py – heat-map view with compact layout + survey redirect
 import psycopg2, streamlit as st, folium
 from folium.plugins import HeatMap, Fullscreen
 from streamlit_folium import st_folium
@@ -8,8 +8,7 @@ PG_URL = ("postgresql://cool_owner:npg_jpi5LdZUbvw1@"
 TABLE = "survey_responses"
 
 
-# ───────── fetch recent rows ─────────
-def fetch_rows(limit: int = 100_000):        # big limit → practically “all”
+def fetch_rows(limit: int = 100_000):
     with psycopg2.connect(PG_URL) as con, con.cursor() as cur:
         cur.execute(
             f"""SELECT lat, lon, feeling
@@ -21,15 +20,10 @@ def fetch_rows(limit: int = 100_000):        # big limit → practically “all�
         return cur.fetchall()
 
 
-# ───────── safe rerun helper ─────────
 def _safe_rerun():
-    if hasattr(st, "rerun"):
-        st.rerun()
-    else:
-        st.experimental_rerun()
+    (st.rerun if hasattr(st, "rerun") else st.experimental_rerun)()
 
 
-# ───────── main UI ─────────
 def show_heatmap():
     st.title("🗺️ نەخشەی هەستەکان بەرامبەر بە کەشوهەوا")
 
@@ -37,19 +31,16 @@ def show_heatmap():
 
     rows = fetch_rows()
     total = len(rows)
-
-    # ---- total contribution counter ----
     st.subheader(f"💬 گشتی بەشداریکردنەکان: {total:,}")
 
     if total == 0:
         st.info("هێشتا هیچ دێتەیەک نییە.")
         return
 
-    weights = {"😃": 1, "😐": 0.66, "☹️": 0.33, "😫": 0}
-    heat = [[lat, lon, weights.get(feel.split()[0], 0.5)]
-            for lat, lon, feel in rows]
+    w = {"😃": 1, "😐": 0.66, "☹️": 0.33, "😫": 0}
+    heat = [[lat, lon, w.get(f.split()[0], 0.5)] for lat, lon, f in rows]
 
-    # ---- legend ----
+    # legend
     for col, emo, slot in zip(
             ["green", "blue", "orange", "red"],
             ["😃", "😐", "☹️", "😫"],
@@ -57,29 +48,33 @@ def show_heatmap():
         slot.markdown(
             f"<div style='background:{col};color:#fff;width:60px;height:60px;"
             "display:flex;align-items:center;justify-content:center;border-radius:8px;"
-            "font-size:28px;'>"
-            f"{emo}</div>",
+            "font-size:28px;'>{emo}</div>",
             unsafe_allow_html=True)
 
-    # ---- Folium heat-map ----
+    # ----- map + button in one container → no big gap -----
+    with st.container():
+        st_folium(
+            folium_map(heat),
+            height=800 if big else 550,
+            use_container_width=True,
+        )
+
+        # small vertical space to separate map edge & button
+        st.markdown(" ", unsafe_allow_html=True)
+
+        if st.button("📝 بەشداربە لە ڕاپرسی", type="primary"):
+            st.session_state.page = "survey"
+            _safe_rerun()
+
+
+# helper to build the Folium map
+def folium_map(heat_data):
     m = folium.Map(location=[36.2, 44.0], zoom_start=6)
     HeatMap(
-        heat,
+        heat_data,
         gradient={"0": "red", "0.33": "orange", "0.66": "blue", "1": "green"},
-        min_opacity=0.25,
-        max_opacity=0.9,
-        radius=35,
-        blur=20,
+        min_opacity=0.25, max_opacity=0.9,
+        radius=35, blur=20,
     ).add_to(m)
     Fullscreen(position="topright").add_to(m)
-
-    st_folium(
-        m,
-        height=800 if big else 550,
-        use_container_width=True
-    )
-
-    # ---- button to go to survey ----
-    if st.button("📝 بەشداربە لە ڕاپرسی", type="primary"):
-        st.session_state.page = "survey"
-        _safe_rerun()
+    return m
