@@ -94,7 +94,7 @@ if sv.page == "survey":
 
 # ═════════════ ٢. Heat-Map ═════════════
 elif sv.page == "map":
-    st.title("🗺️ Heat-Map  نەخشەی هەستەکان بەرامبەر بە کەشوهەوا")
+    st.title("🗺️ نەخشەی هەستەکان بەرامبەر بە کەشوهەوا")
     rows = fetch_rows()
     if not rows:
         st.info("هێشتا هیچ دێتەیەک نییە.")
