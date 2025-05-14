@@ -56,7 +56,7 @@ with st.sidebar:
 if sv.page == "survey":
     st.title("🌡️ ڕاپرسی هەست بە هەوا")
 
-    st.markdown("#### ١. هەستت؟ (ئیمۆجی کلیک بکە)")
+    st.markdown("#### هەستت بەرامبەر بە کەشوهەوا چۆنە؟ (ئیمۆجی کلیک بکە)")
     emojis = ["😃", "😐", "☹️", "😫"]; cols = st.columns(4)
     for i, e in enumerate(emojis):
         if cols[i].button(e, key=f"emo{i}", type="primary" if sv.feeling == e else "secondary"):
