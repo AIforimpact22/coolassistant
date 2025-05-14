@@ -57,7 +57,7 @@ if sv.page=="survey":
     st.markdown("#### ١. هەستت؟")
     cols_legend=st.columns(4)
     info=[("green","😃",""),("blue","😐",""),
-          ("orange","☹️","خۆشم نیە"),("red","😫","زۆر کێشم")]
+          ("orange","☹️",""),("red","😫","")]
     for c,(col,emo,lab) in zip(cols_legend,info):
         c.markdown(color_card(col,emo,lab),unsafe_allow_html=True)
 
