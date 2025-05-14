@@ -103,7 +103,7 @@ elif sv.page=="map":
         weight={"😃":1,"😐":0.66,"☹️":0.33,"😫":0}
         heat=[[lat,lon,weight.get(feel.split()[0],0.5)] for lat,lon,feel in rows]
 
-        st.markdown("##### لێژەندی ڕەنگ ↘")
+        st.markdown("##### کلیلی ڕەنگ ↘")
         lg_cols=st.columns(4)
         for c,(col,emo,_) in zip(lg_cols,[("green","😃",""),("blue","😐",""),
                                           ("orange","☹️",""),("red","😫","")]):
