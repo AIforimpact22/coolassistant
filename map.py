@@ -1,15 +1,15 @@
-# map.py – heat-map + big-view toggle + survey redirect
+# map.py – heat-map + big-view toggle + survey redirect + total counter
 import psycopg2, streamlit as st, folium
 from folium.plugins import HeatMap, Fullscreen
 from streamlit_folium import st_folium
 
 PG_URL = ("postgresql://cool_owner:npg_jpi5LdZUbvw1@"
           "ep-frosty-tooth-a283lla4-pooler.eu-central-1.aws.neon.tech/cool?sslmode=require")
-TABLE  = "survey_responses"
+TABLE = "survey_responses"
 
 
 # ───────── fetch recent rows ─────────
-def fetch_rows(limit: int = 1000):
+def fetch_rows(limit: int = 100_000):        # big limit → practically “all”
     with psycopg2.connect(PG_URL) as con, con.cursor() as cur:
         cur.execute(
             f"""SELECT lat, lon, feeling
@@ -23,7 +23,6 @@ def fetch_rows(limit: int = 1000):
 
 # ───────── safe rerun helper ─────────
 def _safe_rerun():
-    """Streamlit >=1.28 has st.rerun(); older versions use experimental."""
     if hasattr(st, "rerun"):
         st.rerun()
     else:
@@ -37,7 +36,12 @@ def show_heatmap():
     big = st.toggle("🔍 View larger map", value=False)
 
     rows = fetch_rows()
-    if not rows:
+    total = len(rows)
+
+    # ---- total contribution counter ----
+    st.subheader(f"💬 گشتی بەشداریکردنەکان: {total:,}")
+
+    if total == 0:
         st.info("هێشتا هیچ دێتەیەک نییە.")
         return
 
@@ -45,7 +49,7 @@ def show_heatmap():
     heat = [[lat, lon, weights.get(feel.split()[0], 0.5)]
             for lat, lon, feel in rows]
 
-    # ───── legend ─────
+    # ---- legend ----
     for col, emo, slot in zip(
             ["green", "blue", "orange", "red"],
             ["😃", "😐", "☹️", "😫"],
@@ -55,10 +59,9 @@ def show_heatmap():
             "display:flex;align-items:center;justify-content:center;border-radius:8px;"
             "font-size:28px;'>"
             f"{emo}</div>",
-            unsafe_allow_html=True,
-        )
+            unsafe_allow_html=True)
 
-    # ───── Folium map ─────
+    # ---- Folium heat-map ----
     m = folium.Map(location=[36.2, 44.0], zoom_start=6)
     HeatMap(
         heat,
@@ -76,7 +79,7 @@ def show_heatmap():
         use_container_width=True
     )
 
-    # ───── jump to survey ─────
+    # ---- button to go to survey ----
     if st.button("📝 بەشداربە لە ڕاپرسی", type="primary"):
         st.session_state.page = "survey"
         _safe_rerun()
