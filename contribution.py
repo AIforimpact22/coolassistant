@@ -23,7 +23,7 @@ def _fetch_rows(email: str, limit: int = 200):
 
 def show_history(email: str) -> None:
     """Render the ‘My history’ page for the logged-in user."""
-    st.title("📊 Your recent submissions")
+    st.title("📊 دوایین بەشداریکردنت")
 
     rows = _fetch_rows(email)
     if not rows:
