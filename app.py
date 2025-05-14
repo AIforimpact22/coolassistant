@@ -5,24 +5,24 @@ from auth import handle_authentication
 
 import survey
 import map
-import contribution   # “میژووم”
+import contribution
+import about          # ← NEW module
 
 PG_URL = ("postgresql://cool_owner:npg_jpi5LdZUbvw1@"
           "ep-frosty-tooth-a283lla4-pooler.eu-central-1.aws.neon.tech/"
           "cool?sslmode=require")
 TABLE = "survey_responses"
 
-# ───────── DB helpers ─────────
+# ---------- DB helpers ----------
 def ensure_table():
     with psycopg2.connect(PG_URL) as con, con.cursor() as cur:
-        cur.execute(f"""
-        CREATE TABLE IF NOT EXISTS {TABLE}(
-          ts TIMESTAMPTZ,
-          user_email TEXT,
-          lat DOUBLE PRECISION,
-          lon DOUBLE PRECISION,
-          feeling TEXT,
-          issues TEXT);""")
+        cur.execute(f"""CREATE TABLE IF NOT EXISTS {TABLE}(
+            ts TIMESTAMPTZ,
+            user_email TEXT,
+            lat DOUBLE PRECISION,
+            lon DOUBLE PRECISION,
+            feeling TEXT,
+            issues TEXT);""")
 
 def save_row(row: dict):
     ensure_table()
@@ -35,7 +35,7 @@ def save_row(row: dict):
             row)
     st.toast("✅ تۆمار کرا")
 
-# ───────── hourly cleaner ─────────
+# ---------- hourly duplicate cleaner ----------
 @st.cache_data(ttl=3600, show_spinner=False)
 def auto_clean():
     ensure_table()
@@ -55,18 +55,17 @@ DELETE FROM {TABLE} WHERE ctid IN (SELECT ctid FROM dup);""")
 
 auto_clean()
 
-# ───────── Streamlit shell ─────────
+# ---------- Streamlit shell ----------
 st.set_page_config("Cool Assistant", layout="centered")
 handle_authentication()
 user = st.experimental_user
 
-# ───────── sidebar nav ─────────
+# Sidebar
 st.sidebar.image(
     "https://raw.githubusercontent.com/AIforimpact22/coolassistant/main/input/cool_logo.png",
     width=180,
 )
 
-# label (Kurdish) , internal page-key
 PAGES = [("📝 هەستەکەم",   "survey"),
          ("🗺️ نەخشەکەم",  "map"),
          ("📊 مێژووم",    "history"),
@@ -84,9 +83,9 @@ st.sidebar.markdown("---")
 st.sidebar.write("👤", user.email)
 st.sidebar.button("دەرچوون", on_click=st.logout)
 
+# ---------- router ----------
 page = st.session_state.page
 
-# ───────── router ─────────
 if page == "survey":
     survey.show(save_row, user.email)
 
@@ -96,15 +95,8 @@ elif page == "map":
 elif page == "history":
     contribution.show_history(user.email)
 
-else:   # about
-    st.title("ℹ️ دەربارەی Cool Assistant")
-    st.markdown("داتای هەست و کێشەی خەڵک لە کەشوهەوا کۆدەکات بۆ یارمەتیدانی پلانسازی و تەندروستی.")
-    st.image(
-        "https://raw.githubusercontent.com/AIforimpact22/coolassistant/main/input/cool_logo.png",
-        width=230,
-    )
-    st.subheader("پەیوەندی")
-    st.markdown("[hawkar.geoscience@gmail.com](mailto:hawkar.geoscience@gmail.com)")
+else:          # عنایەتی
+    about.show_about()
 
 st.markdown("---")
 st.caption("© 2025 Cool Assistant • هەرێمی کوردستان")
