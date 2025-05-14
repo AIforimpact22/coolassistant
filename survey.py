@@ -1,4 +1,4 @@
-# survey.py – هەست و کێشەی کەشوهەوا (limit: 1 row / 24 h)
+# survey.py – هەست و کێشەی کەشوهەوا (limit: 1 row / 12 h)
 import datetime as dt
 import psycopg2
 import streamlit as st
@@ -12,12 +12,12 @@ TABLE = "survey_responses"
 
 
 def _has_recent(email: str) -> tuple[bool, dt.datetime | None]:
-    """Return (True, last_ts) if this user has submitted within 24 h."""
+    """Return (True, last_ts) if this user has submitted within 12 h."""
     with psycopg2.connect(PG_URL) as con, con.cursor() as cur:
         cur.execute(
             f"""SELECT MAX(ts) FROM {TABLE}
                  WHERE user_email = %s
-                   AND ts > NOW() - INTERVAL '24 hours';""",
+                   AND ts > NOW() - INTERVAL '12 hours';""",
             (email,),
         )
         last_ts = cur.fetchone()[0]
@@ -25,13 +25,13 @@ def _has_recent(email: str) -> tuple[bool, dt.datetime | None]:
 
 
 def show(save_row_fn, user_email: str) -> None:
-    """Render the survey form.  Deny if user already submitted in last 24 h."""
+    """Render the survey form.  Deny if user already submitted in last 12 h."""
     sv = st.session_state
     sv.setdefault("feeling", None)
     sv.setdefault("issues", set())
     sv.setdefault("latlon", None)
 
-    # ----- 24-hour limit check -----
+    # ----- 12-hour limit check -----
     blocked, last_time = _has_recent(user_email)
     if blocked:
         st.warning(
