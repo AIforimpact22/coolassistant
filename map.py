@@ -33,12 +33,15 @@ def show_heatmap():
     heat = [[lat, lon, weights.get(f.split()[0], 0.5)] for lat, lon, f in rows]
 
     # legend
-    for c, (col, emo) in zip(st.columns(4),
-            [("green","😃"),("blue","😐"),("orange","☹️"),("red","😫")]):
-        c.markdown(
-            f"<div style='background:{col};color:#fff;width:60px;height:60px;"
-            "display:flex;align-items:center;justify-content:center;border-radius:8px;"
-            "font-size:28px;'>{emo}</div>", unsafe_allow_html=True)
+    for c, (col, emo) in zip(
+            st.columns(4),
+          [("green", "😃"), ("blue", "😐"), ("orange", "☹️"), ("red", "😫")]):
+        html = (
+          f"<div style='background:{col};color:#fff;width:60px;height:60px;"
+        f"display:flex;align-items:center;justify-content:center;border-radius:8px;"
+        f"font-size:28px;'>{emo}</div>"
+    )
+    c.markdown(html, unsafe_allow_html=True)
 
     # folium map
     m = folium.Map(location=[36.2, 44.0], zoom_start=6)
