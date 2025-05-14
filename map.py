@@ -1,8 +1,8 @@
-# map.py – Heatmap logic with 24-hour user limit for Cool Assistant
-import psycopg2, streamlit as st, folium
+# map.py – Heatmap logic with 24-hour user limit (timezone-aware fix)
+import psycopg2, streamlit as st, folium, pandas as pd
 from folium.plugins import HeatMap
 from streamlit_folium import st_folium
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 
 PG_URL = ("postgresql://cool_owner:npg_jpi5LdZUbvw1@"
           "ep-frosty-tooth-a283lla4-pooler.eu-central-1.aws.neon.tech/cool?sslmode=require")
@@ -10,11 +10,11 @@ PG_URL = ("postgresql://cool_owner:npg_jpi5LdZUbvw1@"
 def fetch_rows(limit=1000):
     with psycopg2.connect(PG_URL) as c:
         cur = c.cursor()
-        cur.execute("SELECT lat, lon, feeling FROM survey_responses ORDER BY ts DESC LIMIT %s;", (limit,))
+        cur.execute("SELECT ts, user_email, lat, lon, feeling FROM survey_responses ORDER BY ts DESC LIMIT %s;", (limit,))
         return cur.fetchall()
 
 def user_can_submit(user_email):
-    """Check if user already submitted within the past 24 hours."""
+    """Check if the user already submitted within the past 24 hours."""
     with psycopg2.connect(PG_URL) as c:
         cur = c.cursor()
         cur.execute("""
@@ -24,14 +24,13 @@ def user_can_submit(user_email):
             (user_email,))
         row = cur.fetchone()
         if row:
-            last_submission = row[0]
-            return (datetime.utcnow() - last_submission) > timedelta(hours=24)
-        return True  # No prior submissions found
+            last_submission = row[0].replace(tzinfo=timezone.utc)
+            return (datetime.now(timezone.utc) - last_submission) > timedelta(hours=24)
+        return True
 
 def show_heatmap():
     st.title("🗺️ نەخشەی هەستەکان بەرامبەر بە کەشوهەوا")
 
-    # Check submission eligibility
     user_email = st.experimental_user.email
     can_submit = user_can_submit(user_email)
 
@@ -43,8 +42,12 @@ def show_heatmap():
         st.info("هێشتا هیچ داتایەک نییە.")
         return
 
+    df = pd.DataFrame(rows, columns=['ts', 'user_email', 'lat', 'lon', 'feeling'])
+
     weight = {"😃": 1, "😐": 0.66, "☹️": 0.33, "😫": 0}
-    heat = [[lat, lon, weight.get(feel[0], 0.5)] for lat, lon, feel in rows]
+    df['weight'] = df['feeling'].str[0].map(weight).fillna(0.5)
+
+    heat = df[['lat', 'lon', 'weight']].values.tolist()
 
     # Legend at top
     lg_cols = st.columns(4)
@@ -58,7 +61,7 @@ def show_heatmap():
     mp = folium.Map(location=[36.2, 44.0], zoom_start=6)
     HeatMap(
         heat,
-        gradient={"0": "red", "0.33": "orange", "0.66": "blue", "1": "green"},
+        gradient={0: "red", 0.33: "orange", 0.66: "blue", 1: "green"},
         min_opacity=0.25,
         max_opacity=0.9,
         radius=35,
