@@ -3,6 +3,23 @@ import requests
 import json
 import psycopg2
 
+def save_device_to_db(user_email, city, device_name, device_power_w, device_usage_hours):
+    PG_URL = (
+        "postgresql://cool_owner:npg_jpi5LdZUbvw1@"
+        "ep-frosty-tooth-a283lla4-pooler.eu-central-1.aws.neon.tech/"
+        "cool?sslmode=require"
+    )
+    insert_query = """
+    INSERT INTO solar_device_entries (
+        user_email, city, device_name, device_power_w, device_usage_hours
+    ) VALUES (%s, %s, %s, %s, %s);
+    """
+    with psycopg2.connect(PG_URL) as con, con.cursor() as cur:
+        cur.execute(insert_query, (
+            user_email, city, device_name, device_power_w, device_usage_hours
+        ))
+        con.commit()
+
 def save_estimate_to_db(
     user_email, city, peak_sun_hours, system_loss_percentage,
     total_energy_wh, required_panel_capacity_w, estimated_system_price_usd,
@@ -82,6 +99,11 @@ def show():
                 "power": power_watts,
                 "usage": usage_hours,
             })
+            try:
+                user_email = st.experimental_user.email if hasattr(st.experimental_user, "email") else "unknown"
+                save_device_to_db(user_email, city, device_name, power_watts, usage_hours)
+            except Exception as e:
+                st.warning(f"Device added, but failed to save to DB: {e}")
 
     if st.session_state["devices"]:
         st.write("#### Devices List")
@@ -158,7 +180,7 @@ def show():
                     save_estimate_to_db(
                         user_email, city, peak_sun_hours, system_loss,
                         total_energy_wh, required_panel_capacity_w, system_price,
-                        annual_energy_kwh, area_m2, 0, devices_json,  # CO₂ is always 0 now
+                        annual_energy_kwh, area_m2, 0, devices_json,
                         battery_capacity_kwh, battery_price_usd, total_price_with_battery
                     )
                     st.success("Your estimate has been saved! ✅")
