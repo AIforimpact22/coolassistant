@@ -1,5 +1,7 @@
 # solar.py
 import streamlit as st
+import requests
+import json
 
 def show():
     # Constants
@@ -87,6 +89,32 @@ def show():
 
             st.caption("Panel capacity is DC rating. Actual output varies by location, weather, and installation.")
             st.caption("All cost and environmental estimates are for guidance only. Consult a professional for precise figures.")
+
+            # --------------- Gemini Suggestion Button ---------------
+            st.markdown("---")
+            if st.button("💡 Suggest Ways to Reduce Consumption"):
+                devices_text = ", ".join(
+                    f"{d['name']} ({d['power']}W, {d['usage']}h/day)" for d in st.session_state["devices"]
+                )
+                prompt = (
+                    f"These are the household devices used by a resident in Kurdistan, Iraq: {devices_text}. "
+                    "Suggest practical, locally relevant ways to reduce electricity consumption for this user."
+                )
+
+                api_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyBQvqNT4wtKsh2WDvVcpgZHCVsLyAOw9dk"
+                headers = {"Content-Type": "application/json"}
+                body = {
+                    "contents": [{"parts": [{"text": prompt}]}]
+                }
+
+                try:
+                    response = requests.post(api_url, headers=headers, data=json.dumps(body), timeout=30)
+                    response.raise_for_status()
+                    data = response.json()
+                    tip = data["candidates"][0]["content"]["parts"][0]["text"]
+                    st.info("**Gemini Suggestion:**\n\n" + tip)
+                except Exception as e:
+                    st.error("Sorry, Gemini could not provide a tip at this moment.")
     else:
         st.info("Add at least one device and select city to see results.")
 
