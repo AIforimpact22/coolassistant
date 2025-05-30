@@ -15,9 +15,8 @@ def show():
     DEFAULT_PEAK_SUN_HOURS = 5.4
     DEFAULT_SYSTEM_LOSS_PERCENTAGE = 20
 
-    # Cost and environmental assumptions (customize for your region)
-    AVG_PANEL_PRICE_PER_WATT = 0.4       # USD/W (panel only)
-    AVG_SYSTEM_PRICE_PER_WATT = 1.0      # USD/W (installed)
+    # Regional assumptions for Kurdistan (2023–2025)
+    AVG_SYSTEM_PRICE_PER_WATT = 1.0      # USD/W (turnkey system, typical)
     AVG_PANEL_WATT_PER_M2 = 180          # W per m² typical
     CO2_PER_KWH_GRID = 0.7               # kg CO₂ per kWh from grid
 
@@ -71,8 +70,7 @@ def show():
             energy_required_from_panels = total_energy_wh / system_loss_factor
             required_panel_capacity_w = energy_required_from_panels / peak_sun_hours
 
-            # --- New Calculations ---
-            panel_price = required_panel_capacity_w * AVG_PANEL_PRICE_PER_WATT
+            # --- Calculations ---
             system_price = required_panel_capacity_w * AVG_SYSTEM_PRICE_PER_WATT
             annual_energy_kwh = required_panel_capacity_w * peak_sun_hours * 365 / 1000
             area_m2 = required_panel_capacity_w / AVG_PANEL_WATT_PER_M2
@@ -82,8 +80,7 @@ def show():
             st.success("## Solar System Estimate")
             st.write(f"**Total Daily Energy Need:** {total_energy_wh:.2f} Wh/day")
             st.write(f"**Recommended Solar Panel Capacity:** {required_panel_capacity_w:.2f} W")
-            st.write(f"**Estimated Panel Price (Beta):** ${panel_price:,.2f} (USD, panels only)")
-            st.write(f"**Estimated Total System Price (Beta):** ${system_price:,.2f} (USD, full install)")
+            st.write(f"**Estimated Total System Price:** ${system_price:,.2f} (USD, full install, no battery)")
             st.write(f"**Estimated Annual Energy Production:** {annual_energy_kwh:,.0f} kWh/year")
             st.write(f"**Estimated Panel Area Required:** {area_m2:.2f} m²")
             st.write(f"**Estimated CO₂ Savings:** {annual_co2_saving:.2f} tons/year (vs. typical grid)")
