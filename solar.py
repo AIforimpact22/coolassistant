@@ -2,6 +2,34 @@
 import streamlit as st
 import requests
 import json
+import psycopg2
+
+def save_estimate_to_db(
+    user_email, city, peak_sun_hours, system_loss_percentage,
+    total_energy_wh, required_panel_capacity_w, estimated_system_price_usd,
+    annual_energy_kwh, panel_area_m2, annual_co2_saving_tons, devices_json
+):
+    PG_URL = (
+        "postgresql://cool_owner:npg_jpi5LdZUbvw1@"
+        "ep-frosty-tooth-a283lla4-pooler.eu-central-1.aws.neon.tech/"
+        "cool?sslmode=require"
+    )
+    insert_query = """
+    INSERT INTO solar_estimates (
+        user_email, city, peak_sun_hours, system_loss_percentage,
+        total_energy_wh, required_panel_capacity_w, estimated_system_price_usd,
+        annual_energy_kwh, panel_area_m2, annual_co2_saving_tons, devices
+    ) VALUES (
+        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+    );
+    """
+    with psycopg2.connect(PG_URL) as con, con.cursor() as cur:
+        cur.execute(insert_query, (
+            user_email, city, peak_sun_hours, system_loss_percentage,
+            total_energy_wh, required_panel_capacity_w, estimated_system_price_usd,
+            annual_energy_kwh, panel_area_m2, annual_co2_saving_tons, devices_json
+        ))
+        con.commit()
 
 def show():
     # Constants
@@ -89,6 +117,20 @@ def show():
 
             st.caption("Panel capacity is DC rating. Actual output varies by location, weather, and installation.")
             st.caption("All cost and environmental estimates are for guidance only. Consult a professional for precise figures.")
+
+            # Save button
+            if st.button("💾 Save My Estimate"):
+                try:
+                    user_email = st.experimental_user.email if hasattr(st.experimental_user, "email") else "unknown"
+                    devices_json = json.dumps(st.session_state["devices"])
+                    save_estimate_to_db(
+                        user_email, city, peak_sun_hours, system_loss,
+                        total_energy_wh, required_panel_capacity_w, system_price,
+                        annual_energy_kwh, area_m2, annual_co2_saving, devices_json
+                    )
+                    st.success("Your estimate has been saved! ✅")
+                except Exception as e:
+                    st.error(f"Failed to save to database: {e}")
 
             # --------------- Gemini Suggestion Button ---------------
             st.markdown("---")
