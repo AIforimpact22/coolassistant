@@ -16,8 +16,8 @@ def show():
     DEFAULT_SYSTEM_LOSS_PERCENTAGE = 20
 
     # Cost and environmental assumptions (customize for your region)
-    AVG_PANEL_PRICE_PER_WATT = 0.5       # USD/W (panel only)
-    AVG_SYSTEM_PRICE_PER_WATT = 1.2      # USD/W (installed)
+    AVG_PANEL_PRICE_PER_WATT = 0.4       # USD/W (panel only)
+    AVG_SYSTEM_PRICE_PER_WATT = 1.0      # USD/W (installed)
     AVG_PANEL_WATT_PER_M2 = 180          # W per m² typical
     CO2_PER_KWH_GRID = 0.7               # kg CO₂ per kWh from grid
 
