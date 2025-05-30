@@ -56,7 +56,7 @@ def show():
 
     # Regional cost/environmental assumptions
     AVG_SYSTEM_PRICE_PER_WATT = 1.0       # USD/W (turnkey system)
-    AVG_BATTERY_PRICE_PER_KWH = 200       # USD/kWh (good market rate, adjust as needed)
+    AVG_BATTERY_PRICE_PER_KWH = 200       # USD/kWh
     AVG_PANEL_WATT_PER_M2 = 180           # W/m²
     CO2_PER_KWH_GRID = 0.7                # kg CO₂ per kWh
 
@@ -116,6 +116,10 @@ def show():
             battery_price_usd = battery_capacity_kwh * AVG_BATTERY_PRICE_PER_KWH
             total_price_with_battery = system_price + battery_price_usd
 
+            # For With Battery, panel area and annual prod are the same (solar size doesn't change)
+            area_m2_battery = area_m2
+            annual_energy_kwh_battery = annual_energy_kwh
+
             st.markdown("### 🌞 Solar System Results")
             # Without Battery Section
             st.markdown("#### Without Battery")
@@ -136,7 +140,8 @@ def show():
             col3.metric("Battery Capacity Needed", f"{battery_capacity_kwh:.2f} kWh")
             col1.metric("Battery Price", f"${battery_price_usd:,.0f} USD")
             col2.metric("Total System Price", f"${total_price_with_battery:,.0f} USD")
-            col3.metric("Annual Energy Production", f"{annual_energy_kwh:,.0f} kWh/year")
+            col3.metric("Panel Area Needed", f"{area_m2_battery:.2f} m²")
+            col1.metric("Annual Energy Production", f"{annual_energy_kwh_battery:,.0f} kWh/year")
 
             st.caption(
                 "Panel capacity is DC rating. "
