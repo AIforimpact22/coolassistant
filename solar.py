@@ -1,4 +1,3 @@
-# solar.py
 import streamlit as st
 import requests
 import json
@@ -111,18 +110,29 @@ def show():
             annual_co2_saving = annual_energy_kwh * CO2_PER_KWH_GRID / 1000
 
             # --- Output Section ---
-            st.success("## Solar System Estimate")
-            st.write(f"**Total Daily Energy Need:** {total_energy_wh:.2f} Wh/day")
-            st.write(f"**Recommended Solar Panel Capacity:** {required_panel_capacity_w:.2f} W")
-            st.write(f"**Estimated Total System Price:** ${system_price:,.2f} (USD, full install, no battery)")
-            st.write(f"**Estimated Annual Energy Production:** {annual_energy_kwh:,.0f} kWh/year")
-            st.write(f"**Estimated Panel Area Required:** {area_m2:.2f} m²")
-            st.write(f"**Estimated CO₂ Savings:** {annual_co2_saving:.2f} tons/year (vs. typical grid)")
+            st.markdown("### 🌞 Solar System Results")
+            with st.container():
+                col1, col2 = st.columns(2, gap="large")
+                with col1:
+                    st.metric("Total Daily Energy Need", f"{total_energy_wh:,.0f} Wh/day")
+                    st.metric("Recommended Panel Capacity", f"{required_panel_capacity_w:,.0f} W")
+                    st.metric("Annual Energy Production", f"{annual_energy_kwh:,.0f} kWh/year")
+                with col2:
+                    st.metric("Estimated System Price", f"${system_price:,.0f} USD")
+                    st.metric("Panel Area Needed", f"{area_m2:.2f} m²")
+                    st.metric("CO₂ Savings", f"{annual_co2_saving:.2f} tons/year")
 
-            st.caption("Panel capacity is DC rating. Actual output varies by location, weather, and installation.")
-            st.caption("All cost and environmental estimates are for guidance only. Consult a professional for precise figures.")
+            st.caption(
+                "Panel capacity is DC rating. "
+                "Actual output varies by location, weather, and installation."
+            )
+            st.caption(
+                "All cost and environmental estimates are for guidance only. "
+                "Consult a professional for precise figures."
+            )
 
             # Save button
+            st.markdown("---")
             if st.button("💾 Save My Estimate"):
                 try:
                     user_email = st.experimental_user.email if hasattr(st.experimental_user, "email") else "unknown"
