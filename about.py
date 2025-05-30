@@ -6,8 +6,15 @@ def show_about() -> None:
     st.title("ℹ️ دەربارەی Cool Assistant")
 
     st.markdown(
-        "کۆول ئاسیستەنت داتای هەستی خەڵک لە بەرامبەر بە کەشوهەوا بەشێوەی نەخشە دەردەخات "
-        "بۆ یارمەتیدانی پلانسازی شار و خزمەتگوزاری تەندروستی."
+        """
+        **Cool Assistant** is a solar and energy advisory tool for the Kurdistan Region.
+        It helps users estimate their solar panel needs (with and without battery storage)
+        and get personalized tips to reduce energy consumption—all tailored for local conditions.
+
+        This tool is developed and maintained by **Hawkar Ali Abdulhaq**, PhD candidate specializing in Geothermal Energy.
+
+        _The project also supports mapping and understanding community feedback on weather and energy usage to assist in sustainable planning for urban and health services._
+        """
     )
 
     st.image(
@@ -15,5 +22,5 @@ def show_about() -> None:
         width=230,
     )
 
-    st.subheader("پەیوەندی")
+    st.subheader("Contact / پەیوەندی")
     st.markdown("[hawkar.geoscience@gmail.com](mailto:hawkar.geoscience@gmail.com)")
