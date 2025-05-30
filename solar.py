@@ -98,7 +98,7 @@ def show():
                 )
                 prompt = (
                     f"These are the household devices used by a resident in Kurdistan, Iraq: {devices_text}. "
-                    "Suggest practical, locally relevant ways to reduce electricity consumption for this user."
+                    "Briefly recommend energy-efficient or low-consumption alternative devices that can help this user reduce electricity usage."
                 )
 
                 api_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyBQvqNT4wtKsh2WDvVcpgZHCVsLyAOw9dk"
