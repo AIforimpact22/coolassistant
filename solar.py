@@ -7,22 +7,21 @@ def save_estimate_to_db(
     user_email, city, peak_sun_hours, system_loss_percentage,
     total_energy_wh, required_panel_capacity_w, estimated_system_price_usd,
     annual_energy_kwh, panel_area_m2, annual_co2_saving_tons, devices_json,
-    scenario, battery_kwh=None, battery_price_usd=None, total_system_price_with_battery_usd=None
+    battery_capacity_kwh=None, battery_price_usd=None, total_price_with_battery=None
 ):
     PG_URL = (
         "postgresql://cool_owner:npg_jpi5LdZUbvw1@"
         "ep-frosty-tooth-a283lla4-pooler.eu-central-1.aws.neon.tech/"
         "cool?sslmode=require"
     )
-    # Add battery fields if present, else null
     insert_query = """
     INSERT INTO solar_estimates (
         user_email, city, peak_sun_hours, system_loss_percentage,
         total_energy_wh, required_panel_capacity_w, estimated_system_price_usd,
         annual_energy_kwh, panel_area_m2, annual_co2_saving_tons, devices,
-        scenario, battery_kwh, battery_price_usd, total_system_price_with_battery_usd
+        battery_capacity_kwh, battery_price_usd, total_price_with_battery
     ) VALUES (
-        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
     );
     """
     with psycopg2.connect(PG_URL) as con, con.cursor() as cur:
@@ -30,7 +29,7 @@ def save_estimate_to_db(
             user_email, city, peak_sun_hours, system_loss_percentage,
             total_energy_wh, required_panel_capacity_w, estimated_system_price_usd,
             annual_energy_kwh, panel_area_m2, annual_co2_saving_tons, devices_json,
-            scenario, battery_kwh, battery_price_usd, total_system_price_with_battery_usd
+            battery_capacity_kwh, battery_price_usd, total_price_with_battery
         ))
         con.commit()
 
@@ -55,21 +54,14 @@ def show():
     CITY_OPTIONS = list(KURDISTAN_CITIES_PEAK_SUN_HOURS.keys())
     DEFAULT_PEAK_SUN_HOURS = 5.4
 
-    AVG_SYSTEM_PRICE_PER_WATT = 1.0      # USD/W (turnkey system, typical)
-    AVG_BATTERY_PRICE_PER_KWH = 220      # USD/kWh (battery pack & inverter, typical for region, 2024)
-    AVG_PANEL_WATT_PER_M2 = 180
-    CO2_PER_KWH_GRID = 0.7
+    # Regional cost/environmental assumptions
+    AVG_SYSTEM_PRICE_PER_WATT = 1.0       # USD/W (turnkey system)
+    AVG_BATTERY_PRICE_PER_KWH = 200       # USD/kWh (good market rate, adjust as needed)
+    AVG_PANEL_WATT_PER_M2 = 180           # W/m²
+    CO2_PER_KWH_GRID = 0.7                # kg CO₂ per kWh
 
     st.title("🔆 Solar System Calculator")
-    st.write("Estimate your required solar panel system for your location in Kurdistan.")
-
-    # Choose scenario
-    scenario = st.radio(
-        "System Scenario",
-        ["Without Battery (Grid-Tied)", "With Battery Backup"],
-        horizontal=True,
-        help="Choose whether your solar system will include a battery for backup power or not."
-    )
+    st.write("Estimate your solar panel system for Kurdistan, with and without battery storage.")
 
     city = st.selectbox("Select City (Kurdistan Region)", CITY_OPTIONS, index=0)
     peak_sun_hours = KURDISTAN_CITIES_PEAK_SUN_HOURS[city] if city != "None" else DEFAULT_PEAK_SUN_HOURS
@@ -112,41 +104,45 @@ def show():
         else:
             energy_required_from_panels = total_energy_wh / system_loss_factor
             required_panel_capacity_w = energy_required_from_panels / peak_sun_hours
+
+            # No Battery Scenario
             system_price = required_panel_capacity_w * AVG_SYSTEM_PRICE_PER_WATT
             annual_energy_kwh = required_panel_capacity_w * peak_sun_hours * 365 / 1000
             area_m2 = required_panel_capacity_w / AVG_PANEL_WATT_PER_M2
             annual_co2_saving = annual_energy_kwh * CO2_PER_KWH_GRID / 1000
 
-            # --- Battery scenario calculations ---
-            battery_kwh = battery_price_usd = total_system_price_with_battery = None
-            if scenario == "With Battery Backup":
-                # Suggest 1 day of backup (you can change this logic)
-                battery_kwh = round(total_energy_wh / 1000, 2)
-                battery_price_usd = round(battery_kwh * AVG_BATTERY_PRICE_PER_KWH, 2)
-                total_system_price_with_battery = round(system_price + battery_price_usd, 2)
+            # With Battery Scenario (1 day autonomy)
+            battery_capacity_kwh = total_energy_wh / 1000      # kWh needed for 1 day
+            battery_price_usd = battery_capacity_kwh * AVG_BATTERY_PRICE_PER_KWH
+            total_price_with_battery = system_price + battery_price_usd
 
-            # --- Output Section ---
-            st.markdown("### 🌞 Solar System Results")
-            with st.container():
-                col1, col2 = st.columns(2, gap="large")
-                with col1:
-                    st.metric("Total Daily Energy Need", f"{total_energy_wh:,.0f} Wh/day")
-                    st.metric("Recommended Panel Capacity", f"{required_panel_capacity_w:,.0f} W")
-                    st.metric("Annual Energy Production", f"{annual_energy_kwh:,.0f} kWh/year")
-                    if scenario == "With Battery Backup":
-                        st.metric("Recommended Battery Size", f"{battery_kwh:.2f} kWh")
-                with col2:
-                    st.metric("Estimated System Price", f"${system_price:,.0f} USD")
-                    st.metric("Panel Area Needed", f"{area_m2:.2f} m²")
-                    st.metric("CO₂ Savings", f"{annual_co2_saving:.2f} tons/year")
-                    if scenario == "With Battery Backup":
-                        st.metric("Estimated Battery Price", f"${battery_price_usd:,.0f} USD")
-                        st.metric("Total System Price (With Battery)", f"${total_system_price_with_battery:,.0f} USD")
+            st.markdown("### 🌞 Solar System Results (Compare Scenarios)")
+            colA, colB = st.columns(2, gap="large")
+            with colA:
+                st.markdown("#### **Without Battery**")
+                st.metric("Total Daily Energy Need", f"{total_energy_wh:,.0f} Wh/day")
+                st.metric("Recommended Panel Capacity", f"{required_panel_capacity_w:,.0f} W")
+                st.metric("Estimated System Price", f"${system_price:,.0f} USD")
+                st.metric("Annual Energy Production", f"{annual_energy_kwh:,.0f} kWh/year")
+                st.metric("Panel Area Needed", f"{area_m2:.2f} m²")
+                st.metric("CO₂ Savings", f"{annual_co2_saving:.2f} tons/year")
+            with colB:
+                st.markdown("#### **With Battery**")
+                st.metric("Total Daily Energy Need", f"{total_energy_wh:,.0f} Wh/day")
+                st.metric("Recommended Panel Capacity", f"{required_panel_capacity_w:,.0f} W")
+                st.metric("Battery Capacity Needed", f"{battery_capacity_kwh:.2f} kWh")
+                st.metric("Battery Price", f"${battery_price_usd:,.0f} USD")
+                st.metric("Total System Price", f"${total_price_with_battery:,.0f} USD")
+                st.metric("Annual Energy Production", f"{annual_energy_kwh:,.0f} kWh/year")
 
-            st.caption("Panel capacity is DC rating. "
-                "Actual output varies by location, weather, and installation.")
-            st.caption("All cost and environmental estimates are for guidance only. "
-                "Consult a professional for precise figures.")
+            st.caption(
+                "Panel capacity is DC rating. "
+                "Actual output varies by location, weather, and installation."
+            )
+            st.caption(
+                "All cost and environmental estimates are for guidance only. "
+                "Consult a professional for precise figures."
+            )
 
             # Save button
             st.markdown("---")
@@ -158,8 +154,7 @@ def show():
                         user_email, city, peak_sun_hours, system_loss,
                         total_energy_wh, required_panel_capacity_w, system_price,
                         annual_energy_kwh, area_m2, annual_co2_saving, devices_json,
-                        scenario,
-                        battery_kwh, battery_price_usd, total_system_price_with_battery
+                        battery_capacity_kwh, battery_price_usd, total_price_with_battery
                     )
                     st.success("Your estimate has been saved! ✅")
                 except Exception as e:
@@ -175,11 +170,13 @@ def show():
                     f"These are the household devices used by a resident in Kurdistan, Iraq: {devices_text}. "
                     "Briefly recommend energy-efficient or low-consumption alternative devices that can help this user reduce electricity usage."
                 )
+
                 api_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyBQvqNT4wtKsh2WDvVcpgZHCVsLyAOw9dk"
                 headers = {"Content-Type": "application/json"}
                 body = {
                     "contents": [{"parts": [{"text": prompt}]}]
                 }
+
                 try:
                     response = requests.post(api_url, headers=headers, data=json.dumps(body), timeout=30)
                     response.raise_for_status()
