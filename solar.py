@@ -116,24 +116,27 @@ def show():
             battery_price_usd = battery_capacity_kwh * AVG_BATTERY_PRICE_PER_KWH
             total_price_with_battery = system_price + battery_price_usd
 
-            st.markdown("### 🌞 Solar System Results (Compare Scenarios)")
-            colA, colB = st.columns(2, gap="large")
-            with colA:
-                st.markdown("#### **Without Battery**")
-                st.metric("Total Daily Energy Need", f"{total_energy_wh:,.0f} Wh/day")
-                st.metric("Recommended Panel Capacity", f"{required_panel_capacity_w:,.0f} W")
-                st.metric("Estimated System Price", f"${system_price:,.0f} USD")
-                st.metric("Annual Energy Production", f"{annual_energy_kwh:,.0f} kWh/year")
-                st.metric("Panel Area Needed", f"{area_m2:.2f} m²")
-                st.metric("CO₂ Savings", f"{annual_co2_saving:.2f} tons/year")
-            with colB:
-                st.markdown("#### **With Battery**")
-                st.metric("Total Daily Energy Need", f"{total_energy_wh:,.0f} Wh/day")
-                st.metric("Recommended Panel Capacity", f"{required_panel_capacity_w:,.0f} W")
-                st.metric("Battery Capacity Needed", f"{battery_capacity_kwh:.2f} kWh")
-                st.metric("Battery Price", f"${battery_price_usd:,.0f} USD")
-                st.metric("Total System Price", f"${total_price_with_battery:,.0f} USD")
-                st.metric("Annual Energy Production", f"{annual_energy_kwh:,.0f} kWh/year")
+            st.markdown("### 🌞 Solar System Results")
+            # Without Battery Section
+            st.markdown("#### Without Battery")
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total Daily Energy Need", f"{total_energy_wh:,.0f} Wh/day")
+            col2.metric("Recommended Panel Capacity", f"{required_panel_capacity_w:,.0f} W")
+            col3.metric("Estimated System Price", f"${system_price:,.0f} USD")
+            col1.metric("Annual Energy Production", f"{annual_energy_kwh:,.0f} kWh/year")
+            col2.metric("Panel Area Needed", f"{area_m2:.2f} m²")
+            col3.metric("CO₂ Savings", f"{annual_co2_saving:.2f} tons/year")
+
+            st.markdown("---")
+            # With Battery Section
+            st.markdown("#### With Battery")
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total Daily Energy Need", f"{total_energy_wh:,.0f} Wh/day")
+            col2.metric("Recommended Panel Capacity", f"{required_panel_capacity_w:,.0f} W")
+            col3.metric("Battery Capacity Needed", f"{battery_capacity_kwh:.2f} kWh")
+            col1.metric("Battery Price", f"${battery_price_usd:,.0f} USD")
+            col2.metric("Total System Price", f"${total_price_with_battery:,.0f} USD")
+            col3.metric("Annual Energy Production", f"{annual_energy_kwh:,.0f} kWh/year")
 
             st.caption(
                 "Panel capacity is DC rating. "
