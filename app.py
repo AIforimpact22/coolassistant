@@ -1,15 +1,17 @@
-# app.py – Cool Assistant • map-first home, DB, hourly clean, share links
+# app.py – Cool Assistant with Solar Calculator
 import datetime as dt, urllib.parse, psycopg2, streamlit as st
 from auth import handle_authentication
 
-import map, survey, contribution, about
+import map, survey, contribution, about, solar
 
+# Database config
 PG_URL = ("postgresql://cool_owner:npg_jpi5LdZUbvw1@"
           "ep-frosty-tooth-a283lla4-pooler.eu-central-1.aws.neon.tech/"
           "cool?sslmode=require")
 TABLE   = "survey_responses"
 APP_URL = "https://coolassistant.streamlit.app"   # public link to share
-# ───────────────── DB helpers ─────────────────
+
+# ──────── DB helpers ────────
 def ensure_table():
     with psycopg2.connect(PG_URL) as con, con.cursor() as cur:
         cur.execute(f"""CREATE TABLE IF NOT EXISTS {TABLE}(
@@ -47,28 +49,32 @@ WITH dup AS (
 DELETE FROM {TABLE} WHERE ctid IN (SELECT ctid FROM dup);""")
         con.commit()
 auto_clean()
-# ───────────────── Streamlit shell ─────────────────
+
+# ──────── Streamlit shell ────────
 st.set_page_config("Cool Assistant", layout="centered")
 handle_authentication()
 user = st.experimental_user
-# ───────────────── Sidebar ─────────────────
+
+# ──────── Sidebar ────────
 st.sidebar.image(
     "https://raw.githubusercontent.com/AIforimpact22/coolassistant/main/input/cool_logo.png",
     width=180,
 )
 
-# Map first, then survey, history, about
-PAGES = [("🗺️ نەخشەکەم",  "map"),
-         ("📝 هەستەکەم",  "survey"),
-         ("📊 مێژووم",    "history"),
-         ("ℹ️ دەربارە",   "about")]
+# Page list: (Label, key)
+PAGES = [
+    ("🗺️ نەخشەکەم", "map"),
+    ("📝 هەستەکەم", "survey"),
+    ("📊 مێژووم", "history"),
+    ("🔆 کەلوپەلی خۆر", "solar"),
+    ("ℹ️ دەربارە", "about")
+]
 
 if "page" not in st.session_state:
-    st.session_state.page = "map"          # default is map now
+    st.session_state.page = "map"          # default page is map
 
 for label, key in PAGES:
-    if st.sidebar.button(label,
-                         type="primary" if st.session_state.page == key else "secondary"):
+    if st.sidebar.button(label, type="primary" if st.session_state.page == key else "secondary"):
         st.session_state.page = key
 
 st.sidebar.markdown("---")
@@ -87,7 +93,7 @@ st.sidebar.markdown(f"[📧 بە ئیمەیڵ]({mailto})")
 st.sidebar.markdown(f"[💬 واتسئاپ]({wa})")
 st.sidebar.code(APP_URL, language="bash")
 
-# ───────────────── Router ─────────────────
+# ──────── Router ────────
 page = st.session_state.page
 if page == "map":
     map.show_heatmap()
@@ -95,6 +101,8 @@ elif page == "survey":
     survey.show(save_row, user.email)
 elif page == "history":
     contribution.show_history(user.email)
+elif page == "solar":
+    solar.show()
 else:
     about.show_about()
 
