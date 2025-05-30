@@ -1,54 +1,8 @@
 import streamlit as st
 import requests
 import json
-import psycopg2
-
-def save_device_to_db(user_email, city, device_name, device_power_w, device_usage_hours):
-    PG_URL = (
-        "postgresql://cool_owner:npg_jpi5LdZUbvw1@"
-        "ep-frosty-tooth-a283lla4-pooler.eu-central-1.aws.neon.tech/"
-        "cool?sslmode=require"
-    )
-    insert_query = """
-    INSERT INTO solar_device_entries (
-        user_email, city, device_name, device_power_w, device_usage_hours
-    ) VALUES (%s, %s, %s, %s, %s);
-    """
-    with psycopg2.connect(PG_URL) as con, con.cursor() as cur:
-        cur.execute(insert_query, (
-            user_email, city, device_name, device_power_w, device_usage_hours
-        ))
-        con.commit()
-
-def save_estimate_to_db(
-    user_email, city, peak_sun_hours, system_loss_percentage,
-    total_energy_wh, required_panel_capacity_w, estimated_system_price_usd,
-    annual_energy_kwh, panel_area_m2, annual_co2_saving_tons, devices_json,
-    battery_capacity_kwh=None, battery_price_usd=None, total_price_with_battery=None
-):
-    PG_URL = (
-        "postgresql://cool_owner:npg_jpi5LdZUbvw1@"
-        "ep-frosty-tooth-a283lla4-pooler.eu-central-1.aws.neon.tech/"
-        "cool?sslmode=require"
-    )
-    insert_query = """
-    INSERT INTO solar_estimates (
-        user_email, city, peak_sun_hours, system_loss_percentage,
-        total_energy_wh, required_panel_capacity_w, estimated_system_price_usd,
-        annual_energy_kwh, panel_area_m2, annual_co2_saving_tons, devices,
-        battery_capacity_kwh, battery_price_usd, total_price_with_battery
-    ) VALUES (
-        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-    );
-    """
-    with psycopg2.connect(PG_URL) as con, con.cursor() as cur:
-        cur.execute(insert_query, (
-            user_email, city, peak_sun_hours, system_loss_percentage,
-            total_energy_wh, required_panel_capacity_w, estimated_system_price_usd,
-            annual_energy_kwh, panel_area_m2, annual_co2_saving_tons, devices_json,
-            battery_capacity_kwh, battery_price_usd, total_price_with_battery
-        ))
-        con.commit()
+import pandas as pd
+import io
 
 def show():
     # Constants
@@ -99,11 +53,6 @@ def show():
                 "power": power_watts,
                 "usage": usage_hours,
             })
-            try:
-                user_email = st.experimental_user.email if hasattr(st.experimental_user, "email") else "unknown"
-                save_device_to_db(user_email, city, device_name, power_watts, usage_hours)
-            except Exception as e:
-                st.warning(f"Device added, but failed to save to DB: {e}")
 
     if st.session_state["devices"]:
         st.write("#### Devices List")
@@ -136,7 +85,6 @@ def show():
             battery_price_usd = battery_capacity_kwh * AVG_BATTERY_PRICE_PER_KWH
             total_price_with_battery = system_price + battery_price_usd
 
-            # For With Battery, panel area and annual prod are the same (solar size doesn't change)
             area_m2_battery = area_m2
             annual_energy_kwh_battery = annual_energy_kwh
 
@@ -171,21 +119,38 @@ def show():
                 "Consult a professional for precise figures."
             )
 
-            # Save button
+            # Download CSV button instead of saving to Neon
             st.markdown("---")
-            if st.button("💾 Save My Estimate"):
-                try:
-                    user_email = st.experimental_user.email if hasattr(st.experimental_user, "email") else "unknown"
-                    devices_json = json.dumps(st.session_state["devices"])
-                    save_estimate_to_db(
-                        user_email, city, peak_sun_hours, system_loss,
-                        total_energy_wh, required_panel_capacity_w, system_price,
-                        annual_energy_kwh, area_m2, 0, devices_json,
-                        battery_capacity_kwh, battery_price_usd, total_price_with_battery
-                    )
-                    st.success("Your estimate has been saved! ✅")
-                except Exception as e:
-                    st.error(f"Failed to save to database: {e}")
+            if st.button("💾 Prepare My Estimate as CSV"):
+                # Summary data
+                summary = {
+                    "City": city,
+                    "Peak Sun Hours": peak_sun_hours,
+                    "System Loss (%)": system_loss,
+                    "Total Daily Energy Need (Wh/day)": total_energy_wh,
+                    "Recommended Panel Capacity (W)": required_panel_capacity_w,
+                    "Estimated System Price (USD)": system_price,
+                    "Annual Energy Production (kWh)": annual_energy_kwh,
+                    "Panel Area Needed (m2)": area_m2,
+                    "Battery Capacity Needed (kWh)": battery_capacity_kwh,
+                    "Battery Price (USD)": battery_price_usd,
+                    "Total System Price With Battery (USD)": total_price_with_battery
+                }
+                df_summary = pd.DataFrame([summary])
+                df_devices = pd.DataFrame(st.session_state["devices"])
+                csv_buffer = io.StringIO()
+                # Write summary, then devices to CSV
+                df_summary.to_csv(csv_buffer, index=False)
+                csv_buffer.write("\n")
+                csv_buffer.write("Device Name,Power (W),Daily Usage (h)\n")
+                df_devices.to_csv(csv_buffer, index=False, header=False)
+                csv_data = csv_buffer.getvalue()
+                st.download_button(
+                    label="⬇️ Download My Solar Estimate CSV",
+                    data=csv_data,
+                    file_name="solar_estimate.csv",
+                    mime="text/csv"
+                )
 
             # --------------- Gemini Suggestion Button ---------------
             st.markdown("---")
