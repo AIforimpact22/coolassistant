@@ -108,13 +108,14 @@ def show():
             col3.metric("Panel Area Needed", f"{area_m2_battery:.2f} m²")
             col1.metric("Annual Energy Production", f"{annual_energy_kwh_battery:,.0f} kWh/year")
 
-            st.caption(
-                "Panel capacity is DC rating. "
-                "Actual output varies by location, weather, and installation."
+            st.info(
+                "💡 **All system cost estimates include solar panels, inverter, mounting, and standard installation (excluding battery storage).**"
             )
             st.caption(
-                "All cost and environmental estimates are for guidance only. "
-                "Consult a professional for precise figures."
+                "Panel capacity is DC rating. Actual output varies by location, weather, and installation."
+            )
+            st.caption(
+                "All cost and environmental estimates are for guidance only. Consult a professional for precise figures."
             )
 
             # --------------- Gemini Suggestion Button ---------------
