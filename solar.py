@@ -58,7 +58,6 @@ def show():
     AVG_SYSTEM_PRICE_PER_WATT = 1.0       # USD/W (turnkey system)
     AVG_BATTERY_PRICE_PER_KWH = 200       # USD/kWh
     AVG_PANEL_WATT_PER_M2 = 180           # W/m²
-    CO2_PER_KWH_GRID = 0.7                # kg CO₂ per kWh
 
     st.title("🔆 Solar System Calculator")
     st.write("Estimate your solar panel system for Kurdistan, with and without battery storage.")
@@ -109,7 +108,6 @@ def show():
             system_price = required_panel_capacity_w * AVG_SYSTEM_PRICE_PER_WATT
             annual_energy_kwh = required_panel_capacity_w * peak_sun_hours * 365 / 1000
             area_m2 = required_panel_capacity_w / AVG_PANEL_WATT_PER_M2
-            annual_co2_saving = annual_energy_kwh * CO2_PER_KWH_GRID / 1000
 
             # With Battery Scenario (1 day autonomy)
             battery_capacity_kwh = total_energy_wh / 1000      # kWh needed for 1 day
@@ -129,7 +127,6 @@ def show():
             col3.metric("Estimated System Price", f"${system_price:,.0f} USD")
             col1.metric("Annual Energy Production", f"{annual_energy_kwh:,.0f} kWh/year")
             col2.metric("Panel Area Needed", f"{area_m2:.2f} m²")
-            col3.metric("CO₂ Savings", f"{annual_co2_saving:.2f} tons/year")
 
             st.markdown("---")
             # With Battery Section
@@ -161,7 +158,7 @@ def show():
                     save_estimate_to_db(
                         user_email, city, peak_sun_hours, system_loss,
                         total_energy_wh, required_panel_capacity_w, system_price,
-                        annual_energy_kwh, area_m2, annual_co2_saving, devices_json,
+                        annual_energy_kwh, area_m2, 0, devices_json,  # CO₂ is always 0 now
                         battery_capacity_kwh, battery_price_usd, total_price_with_battery
                     )
                     st.success("Your estimate has been saved! ✅")
