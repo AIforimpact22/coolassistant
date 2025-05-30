@@ -1,3 +1,4 @@
+# solar.py
 import streamlit as st
 import requests
 import json
@@ -60,24 +61,11 @@ def show():
     st.title("🔆 Solar System Calculator")
     st.write("Estimate your required solar panel system for your location in Kurdistan.")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        city = st.selectbox("Select City (Kurdistan Region)", CITY_OPTIONS, index=0)
-        peak_sun_hours = KURDISTAN_CITIES_PEAK_SUN_HOURS[city] if city != "None" else DEFAULT_PEAK_SUN_HOURS
-    with col2:
-        system_loss = KURDISTAN_CITIES_SYSTEM_LOSS.get(city, 20)
-        st.number_input(
-            "System Losses (%) (set by city)",
-            value=system_loss,
-            min_value=0,
-            max_value=50,
-            step=1,
-            disabled=True,
-            key="system_loss_disabled"
-        )
+    city = st.selectbox("Select City (Kurdistan Region)", CITY_OPTIONS, index=0)
+    peak_sun_hours = KURDISTAN_CITIES_PEAK_SUN_HOURS[city] if city != "None" else DEFAULT_PEAK_SUN_HOURS
+    system_loss = KURDISTAN_CITIES_SYSTEM_LOSS.get(city, 20)
 
     st.markdown(f"*Peak Sun Hours*: **{peak_sun_hours if peak_sun_hours else 'N/A'}** hours/day")
-    st.markdown(f"*System Loss*: **{system_loss}%** (set by city)")
 
     st.subheader("Add Your Devices")
     if "devices" not in st.session_state:
