@@ -40,9 +40,17 @@ def show():
         "Halabja": 5.2,
         "Kirkuk": 5.5,
     }
+    # Set city-specific system loss values (update as needed)
+    KURDISTAN_CITIES_SYSTEM_LOSS = {
+        "None": 20,
+        "Erbil": 18,
+        "Sulaimani": 21,
+        "Duhok": 17,
+        "Halabja": 20,
+        "Kirkuk": 19,
+    }
     CITY_OPTIONS = list(KURDISTAN_CITIES_PEAK_SUN_HOURS.keys())
     DEFAULT_PEAK_SUN_HOURS = 5.4
-    FIXED_SYSTEM_LOSS_PERCENTAGE = 20   # Now fixed, not editable
 
     # Regional assumptions for Kurdistan (2023–2025)
     AVG_SYSTEM_PRICE_PER_WATT = 1.0      # USD/W (turnkey system, typical)
@@ -57,10 +65,19 @@ def show():
         city = st.selectbox("Select City (Kurdistan Region)", CITY_OPTIONS, index=0)
         peak_sun_hours = KURDISTAN_CITIES_PEAK_SUN_HOURS[city] if city != "None" else DEFAULT_PEAK_SUN_HOURS
     with col2:
-        st.markdown(f"**System Losses:** {FIXED_SYSTEM_LOSS_PERCENTAGE}% (fixed)")
+        system_loss = KURDISTAN_CITIES_SYSTEM_LOSS.get(city, 20)
+        st.number_input(
+            "System Losses (%) (set by city)",
+            value=system_loss,
+            min_value=0,
+            max_value=50,
+            step=1,
+            disabled=True,
+            key="system_loss_disabled"
+        )
 
     st.markdown(f"*Peak Sun Hours*: **{peak_sun_hours if peak_sun_hours else 'N/A'}** hours/day")
-    st.markdown(f"*System Loss*: **{FIXED_SYSTEM_LOSS_PERCENTAGE}%** (fixed)")
+    st.markdown(f"*System Loss*: **{system_loss}%** (set by city)")
 
     st.subheader("Add Your Devices")
     if "devices" not in st.session_state:
@@ -90,11 +107,11 @@ def show():
                 st.experimental_rerun()
 
     st.markdown("---")
-    if st.session_state["devices"] and peak_sun_hours and FIXED_SYSTEM_LOSS_PERCENTAGE < 100:
+    if st.session_state["devices"] and peak_sun_hours and system_loss < 100:
         total_energy_wh = sum(d["power"] * d["usage"] for d in st.session_state["devices"])
-        system_loss_factor = 1 - (FIXED_SYSTEM_LOSS_PERCENTAGE / 100)
+        system_loss_factor = 1 - (system_loss / 100)
         if system_loss_factor <= 0:
-            st.error("System loss is 100% or more. Please adjust.")
+            st.error("System loss is 100% or more. Please adjust your city.")
         else:
             energy_required_from_panels = total_energy_wh / system_loss_factor
             required_panel_capacity_w = energy_required_from_panels / peak_sun_hours
@@ -123,7 +140,7 @@ def show():
                     user_email = st.experimental_user.email if hasattr(st.experimental_user, "email") else "unknown"
                     devices_json = json.dumps(st.session_state["devices"])
                     save_estimate_to_db(
-                        user_email, city, peak_sun_hours, FIXED_SYSTEM_LOSS_PERCENTAGE,
+                        user_email, city, peak_sun_hours, system_loss,
                         total_energy_wh, required_panel_capacity_w, system_price,
                         annual_energy_kwh, area_m2, annual_co2_saving, devices_json
                     )
