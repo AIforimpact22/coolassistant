@@ -25,10 +25,10 @@ def show():
     CITY_OPTIONS = list(KURDISTAN_CITIES_PEAK_SUN_HOURS.keys())
     DEFAULT_PEAK_SUN_HOURS = 5.4
 
-    # Regional cost/environmental assumptions
-    AVG_SYSTEM_PRICE_PER_WATT = 1.0       # USD/W (turnkey system)
-    AVG_BATTERY_PRICE_PER_KWH = 200       # USD/kWh
-    AVG_PANEL_WATT_PER_M2 = 180           # W/m²
+    # Regional assumptions
+    AVG_SYSTEM_PRICE_PER_WATT = 1.0
+    AVG_BATTERY_PRICE_PER_KWH = 200
+    AVG_PANEL_WATT_PER_M2 = 180
 
     st.title("🔆 Solar System Calculator")
     st.write("Estimate your solar panel system for Kurdistan, with and without battery storage.")
@@ -75,16 +75,15 @@ def show():
             energy_required_from_panels = total_energy_wh / system_loss_factor
             required_panel_capacity_w = energy_required_from_panels / peak_sun_hours
 
-            # No Battery Scenario
+            # No Battery
             system_price = required_panel_capacity_w * AVG_SYSTEM_PRICE_PER_WATT
             annual_energy_kwh = required_panel_capacity_w * peak_sun_hours * 365 / 1000
             area_m2 = required_panel_capacity_w / AVG_PANEL_WATT_PER_M2
 
-            # With Battery Scenario (1 day autonomy)
-            battery_capacity_kwh = total_energy_wh / 1000      # kWh needed for 1 day
+            # With Battery (1 day autonomy)
+            battery_capacity_kwh = total_energy_wh / 1000
             battery_price_usd = battery_capacity_kwh * AVG_BATTERY_PRICE_PER_KWH
             total_price_with_battery = system_price + battery_price_usd
-
             area_m2_battery = area_m2
             annual_energy_kwh_battery = annual_energy_kwh
 
@@ -152,7 +151,7 @@ def show():
                     mime="text/csv"
                 )
 
-            # --------------- Gemini Suggestion Button ---------------
+            # Gemini Suggestion Button
             st.markdown("---")
             if st.button("💡 Suggest Ways to Reduce Consumption"):
                 devices_text = ", ".join(
@@ -162,13 +161,11 @@ def show():
                     f"These are the household devices used by a resident in Kurdistan, Iraq: {devices_text}. "
                     "Briefly recommend energy-efficient or low-consumption alternative devices that can help this user reduce electricity usage."
                 )
-
                 api_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyBQvqNT4wtKsh2WDvVcpgZHCVsLyAOw9dk"
                 headers = {"Content-Type": "application/json"}
                 body = {
                     "contents": [{"parts": [{"text": prompt}]}]
                 }
-
                 try:
                     response = requests.post(api_url, headers=headers, data=json.dumps(body), timeout=30)
                     response.raise_for_status()
